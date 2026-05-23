@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from "react";
 const SUPABASE_URL    = "https://dnuxevxxgmgptptmuzdy.supabase.co";
 const SUPABASE_ANON   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRudXhldnh4Z21ncHRwdG11emR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MjY1OTAsImV4cCI6MjA5NTEwMjU5MH0.o7lx6HiTU8a3XPF501WNFYk7NOxfYoBrphqVunhOk2s";
 const PROJECT_NAME    = "مزاهر";
+const PROJECT_ID      = "d64b040a-0824-43b8-966e-eb41ee095f82";
 
 // ══════════════════════════════════════════
 //  ٢. Supabase Client بسيط (بدون مكتبة)
@@ -552,11 +553,9 @@ export default function App() {
   const [period, setPeriod]   = useState({ from: new Date().toISOString().slice(0,8)+"01", to: new Date().toISOString().slice(0,10) });
   const [pendingCount, setPending] = useState(0);
 
-  // جلب ID المشروع عند التحميل
+  // استخدام PROJECT_ID مباشرة
   useEffect(()=>{
-    sb.query("projects",{filter:{"name":`eq.${PROJECT_NAME}`}}).then(res=>{
-      if(res[0]) setProj(res[0].id);
-    });
+    setProj(PROJECT_ID);
   },[]);
 
   // تحديث عدد الحركات المنتظرة
