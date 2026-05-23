@@ -12,19 +12,26 @@ const PROJECT_NAME    = "مزاهر";
 // ══════════════════════════════════════════
 const sb = {
   async query(table, params = {}) {
-    const url  = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
-    const opts = { headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${SUPABASE_ANON}`, "Content-Type": "application/json", "Prefer": "return=representation" } };
-    if (params.select) url.searchParams.set("select", params.select);
+    let url = `${SUPABASE_URL}/rest/v1/${table}?`;
+    const parts = [];
+    if (params.select) parts.push(`select=${params.select}`);
     if (params.filter) {
       Object.entries(params.filter).forEach(([k,v]) => {
-        if (k === "date_from") url.searchParams.append("date", `gte.${v}`);
-        else if (k === "date_to") url.searchParams.append("date", `lte.${v}`);
-        else url.searchParams.set(k, v);
+        if (k === "date_from") parts.push(`date=gte.${v}`);
+        else if (k === "date_to") parts.push(`date=lte.${v}`);
+        else parts.push(`${k}=${v}`);
       });
     }
-    if (params.order) url.searchParams.set("order", params.order);
-    if (params.limit) url.searchParams.set("limit", params.limit);
-    const res  = await fetch(url, opts);
+    if (params.order) parts.push(`order=${params.order}`);
+    if (params.limit) parts.push(`limit=${params.limit}`);
+    url += parts.join("&");
+    const res = await fetch(url, {
+      headers: {
+        "apikey": SUPABASE_ANON,
+        "Authorization": `Bearer ${SUPABASE_ANON}`,
+        "Content-Type": "application/json"
+      }
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
