@@ -451,9 +451,10 @@ function ReportsPage({ projectId, period }) {
   const sum = (type,cols) => ledger.filter(e=>e.type===type).reduce((s,e)=>s+cols.reduce((a,c)=>a+(e[c]||0),0),0);
   const sumTypes = (types,cols) => types.reduce((s,t)=>s+sum(t,cols),0);
 
-  const cashSales    = salesData.reduce((s,e)=>s+(e.cash_sales||0),0);
-  const netSales     = salesData.reduce((s,e)=>s+(e.network_sales||0),0);
-  const totalSales   = cashSales + netSales;
+  // المبيعات من الدفتر مباشرة
+  const cashSales  = ledger.filter(e=>e.type==="💵 مبيعات كاش").reduce((s,e)=>s+(e.cash_in||0),0);
+  const netSales   = ledger.filter(e=>e.type==="🏦 مبيعات شبكة").reduce((s,e)=>s+(e.bank_in||0),0);
+  const totalSales = cashSales + netSales;
   const opExp        = sum("🛒 مصروفات تشغيلية",["cash_out","bank_out","custody_out"]);
   const fixedExp     = sum("💰 مصروفات ثابتة",["cash_out","bank_out","custody_out"]);
   const totalExp     = opExp + fixedExp;
