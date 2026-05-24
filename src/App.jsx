@@ -104,8 +104,25 @@ const CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0D1117;color:#C9D1D9;font-family:'IBM Plex Sans Arabic',sans-serif;direction:rtl}
 .layout{display:flex;min-height:100vh}
-.sidebar{width:210px;background:#161B22;border-left:1px solid #21262D;padding:16px 0;position:fixed;top:0;right:0;bottom:0;display:flex;flex-direction:column;z-index:50}
+.sidebar{width:210px;background:#161B22;border-left:1px solid #21262D;padding:16px 0;position:fixed;top:0;right:0;bottom:0;display:flex;flex-direction:column;z-index:50;transition:transform 0.3s}
+.sidebar.hidden{transform:translateX(100%)}
 .content{margin-right:210px;flex:1}
+@media(max-width:768px){
+  .sidebar{width:200px;transform:translateX(100%)}
+  .sidebar.open{transform:translateX(0)}
+  .content{margin-right:0}
+  .topbar{padding:8px 12px}
+  .page{padding:10px 12px}
+  .kpis{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}
+  .bal-grid{grid-template-columns:repeat(3,1fr)!important}
+  .rep-grid{grid-template-columns:1fr!important}
+  .ledger-table{font-size:11px}
+  .ledger-table th,.ledger-table td{padding:6px 6px}
+  .mobile-menu-btn{display:flex!important}
+  .overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49}
+  .overlay-bg.show{display:block}
+}
+.mobile-menu-btn{display:none;background:transparent;border:none;color:#E6EDF3;font-size:20px;cursor:pointer;padding:4px 8px}
 .brand{padding:12px 18px 18px;border-bottom:1px solid #21262D;margin-bottom:8px}
 .brand-name{font-size:15px;font-weight:700;color:#E6EDF3}
 .brand-role{font-size:11px;color:#58A6FF;margin-top:2px}
@@ -219,6 +236,16 @@ body{background:#0D1117;color:#C9D1D9;font-family:'IBM Plex Sans Arabic',sans-se
 .vat-l{font-size:11px;color:#D29922;margin-bottom:3px}
 .vat-v{font-size:20px;font-weight:700;color:#D29922;font-family:'JetBrains Mono',monospace}
   @media print{.sidebar,.topbar,button{display:none!important}.content{margin-right:0!important}.layout{display:block!important}.page{padding:10px!important}body{background:white!important}}
+  /* تحسينات التقارير */
+  .report-header{background:linear-gradient(135deg,#1B4F72 0%,#2980B9 100%);padding:20px;border-radius:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+  .report-header-title{font-size:18px;font-weight:700;color:#fff}
+  .report-header-sub{font-size:12px;color:rgba(255,255,255,0.7);margin-top:4px}
+  .report-header-badge{background:rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px;text-align:center}
+  .kpi-trend{font-size:10px;margin-top:3px;display:flex;align-items:center;gap:3px}
+  .trend-up{color:#3FB950}
+  .trend-down{color:#DA3633}
+  .section-divider{height:1px;background:linear-gradient(90deg,transparent,#30363D,transparent);margin:16px 0}
+
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center}
 .modal{background:#161B22;border:1px solid #30363D;border-radius:12px;padding:24px;width:500px;max-height:85vh;overflow-y:auto}
 .modal-title{font-size:15px;font-weight:700;color:#E6EDF3;margin-bottom:18px}
@@ -452,99 +479,181 @@ function LedgerPage({ projectId, period }) {
 //  ٨. شاشة التقارير — من Supabase
 // ══════════════════════════════════════════
 function ReportsPage({ projectId, period }) {
-  const { data: ledger, loading: l1 } = useData("ledger_entries",{filter:{"project_id":`eq.${projectId}`,"date":`gte.${period.from}&date=lte.${period.to}`,"status":"eq.approved"}},[projectId,period.from,period.to]);
-  const { data: salesData, loading: l2 } = useData("sales",{filter:{"project_id":`eq.${projectId}`,"date":`gte.${period.from}&date=lte.${period.to}`}},[projectId,period.from,period.to]);
+  const { data: ledger, loading: l1 } = useData("ledger_entries",{filter:{"project_id":`eq.${projectId}`,"date_from":period.from,"date_to":period.to,"status":"eq.approved"}},[projectId,period.from,period.to]);
   const { data: loansData } = useData("loans",{filter:{"project_id":`eq.${projectId}`}},[projectId]);
   const { data: allLedger } = useData("ledger_with_balances",{filter:{"project_id":`eq.${projectId}`},order:"date.asc,created_at.asc"},[projectId]);
 
-  const sum = (type,cols) => ledger.filter(e=>e.type===type).reduce((s,e)=>s+cols.reduce((a,c)=>a+(e[c]||0),0),0);
-  const sumTypes = (types,cols) => types.reduce((s,t)=>s+sum(t,cols),0);
+  const sum = (types,cols) => ledger.filter(e=>types.some(t=>e.type&&e.type.includes(t))).reduce((s,e)=>s+cols.reduce((a,c)=>a+(Number(e[c])||0),0),0);
 
-  // المبيعات من الدفتر مباشرة
   const cashSales  = ledger.filter(e=>e.type==="💵 مبيعات كاش").reduce((s,e)=>s+(e.cash_in||0),0);
   const netSales   = ledger.filter(e=>e.type==="🏦 مبيعات شبكة").reduce((s,e)=>s+(e.bank_in||0),0);
-  const totalSales = cashSales + netSales;
-  const opExp        = sum("🛒 مصروفات تشغيلية",["cash_out","bank_out","custody_out"]);
-  const fixedExp     = sum("💰 مصروفات ثابتة",["cash_out","bank_out","custody_out"]);
-  const totalExp     = opExp + fixedExp;
-  const totalLoans   = sumTypes(["💳 قسط سيارة","💳 قسط شراء أرض","💳 قرض ١","💳 قرض ٢"],["cash_out","bank_out","custody_out"]);
-  const totalWithd   = sumTypes(["💼 مسحوبات سليمان","💼 مسحوبات أم طوبى"],["cash_out","bank_out","custody_out"]);
-  const gross        = totalSales - totalExp;
-  const net          = gross - totalLoans;
-  const cashflow     = net - totalWithd;
-  const lastRow      = allLedger[allLedger.length-1];
-  const vatPurchases = ledger.reduce((s,e)=>s+(e.vat_amount||0),0);
+  const total      = cashSales + netSales;
+  const opExp      = sum(["مصروفات تشغيلية"],["cash_out","bank_out","custody_out"]);
+  const fixedExp   = sum(["مصروفات ثابتة"],["cash_out","bank_out","custody_out"]);
+  const loans      = sum(["قسط سيارة","قسط شراء أرض","قرض ١","قرض ٢"],["cash_out","bank_out","custody_out"]);
+  const withd      = sum(["مسحوبات سليمان","مسحوبات أم طوبى"],["cash_out","bank_out","custody_out"]);
+  const gross      = total - opExp - fixedExp;
+  const net        = gross - loans;
+  const cashflow   = net - withd;
+  const last       = allLedger[allLedger.length-1];
+  const vatPurch   = ledger.reduce((s,e)=>s+(e.vat_amount||0),0);
+  const p = (v,b) => b>0?`${((v/b)*100).toFixed(1)}%`:"—";
 
-  const loanPaid = (name) => sumTypes([name],["cash_out","bank_out","custody_out"]) + (allLedger.filter(e=>e.type===name).reduce((s,e)=>s+(e.cash_out||0)+(e.bank_out||0)+(e.custody_out||0),0));
+  if(l1) return <div className="page"><div className="loading">⏳ جاري التحميل...</div></div>;
 
-  if(l1||l2) return <div className="page"><div className="loading">⏳ جاري التحميل...</div></div>;
+  const KPI = ({label,value,sub,color,icon}) => (
+    <div className="kpi" style={{borderTopColor:color,position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:12,left:12,fontSize:22,opacity:0.15}}>{icon}</div>
+      <div className="kpi-l">{label}</div>
+      <div className="kpi-v" style={{color}}>{fmt(value)}</div>
+      <div className="kpi-s">{sub}</div>
+    </div>
+  );
+
+  const SRow = ({label,value,pct,color,bold,indent,negative}) => (
+    <div className="rrow" style={{background:bold?"rgba(255,255,255,0.02)":"transparent",paddingRight:indent?28:12,paddingLeft:12}}>
+      <span className="rrow-l" style={{fontWeight:bold?"600":"400",color:bold?"#E6EDF3":"#C9D1D9"}}>{label}</span>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        {pct && <span style={{fontSize:10,color:"#8B949E",minWidth:45,textAlign:"left"}}>{pct}</span>}
+        <span className="rrow-v" style={{color:color||(bold?"#E6EDF3":"#C9D1D9"),fontSize:bold?14:12,minWidth:90,textAlign:"left"}}>
+          {negative ? `(${fmt(Math.abs(value))})` : fmt(value)}
+        </span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="page">
-      <div className="kpis">
-        {[{l:"إجمالي المبيعات",v:totalSales,s:`كاش ${fmt(cashSales)}`,c:"#00D4AA"},
-          {l:"مجمل الربح",v:gross,s:pct(gross,totalSales)+" من المبيعات",c:"#D29922"},
-          {l:"صافي الربح",v:net,s:`هامش ${pct(net,totalSales)}`,c:"#58A6FF"},
-          {l:"صافي التدفق",v:cashflow,s:"بعد المسحوبات",c:"#8B5CF6"}]
-          .map((k,i)=><div key={i} className="kpi" style={{borderTopColor:k.c}}><div className="kpi-l">{k.l}</div><div className="kpi-v" style={{color:k.c}}>{fmt(k.v)}</div><div className="kpi-s">{k.s}</div></div>)}
+      {/* Header */}
+      <div className="report-header">
+        <div>
+          <div className="report-header-title">📊 التقرير المالي — مزاهر</div>
+          <div className="report-header-sub">{period.from} إلى {period.to}</div>
+        </div>
+        <div style={{display:"flex",gap:12}}>
+          {[
+            {l:"إجمالي المبيعات",v:fmt(total),c:"#00D4AA"},
+            {l:"صافي الربح",     v:fmt(net),  c:net>=0?"#3FB950":"#DA3633"},
+          ].map((b,i)=>(
+            <div key={i} className="report-header-badge">
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",marginBottom:2}}>{b.l}</div>
+              <div style={{fontSize:15,fontWeight:700,color:b.c,fontFamily:"JetBrains Mono"}}>{b.v}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="bal-grid">
-        {[{l:"🏧 الصندوق",v:lastRow?.cash_balance||0,c:(lastRow?.cash_balance||0)<0?"#DA3633":"#3FB950"},
-          {l:"🏦 البنك",  v:lastRow?.bank_balance||0, c:(lastRow?.bank_balance||0)<0?"#DA3633":"#58A6FF"},
-          {l:"👤 العهدة", v:lastRow?.custody_balance||0,c:(lastRow?.custody_balance||0)<0?"#DA3633":"#D29922"}]
-          .map((b,i)=><div key={i} className="bal-item"><div className="bal-lbl">{b.l}</div><div className="bal-val" style={{color:b.c}}>{fmt(b.v)}</div></div>)}
+
+      {/* KPIs */}
+      <div className="kpis" style={{marginBottom:20}}>
+        <KPI label="💰 إجمالي المبيعات" value={total}     sub={`كاش ${fmt(cashSales)}`}      color="#00D4AA" icon="💰"/>
+        <KPI label="📦 مجمل الربح"      value={gross}     sub={`${p(gross,total)} من المبيعات`} color="#D29922" icon="📦"/>
+        <KPI label="📈 صافي الربح"      value={net}       sub={`هامش ${p(net,total)}`}          color="#58A6FF" icon="📈"/>
+        <KPI label="💸 صافي التدفق"     value={cashflow}  sub="بعد المسحوبات"                   color="#8B5CF6" icon="💸"/>
       </div>
+
+      {/* الأرصدة */}
+      <div className="bal-grid" style={{marginBottom:20}}>
+        {[{l:"🏧 الصندوق",v:last?.cash_balance||0,c:"#3FB950"},{l:"🏦 البنك",v:last?.bank_balance||0,c:(last?.bank_balance||0)<0?"#DA3633":"#58A6FF"},{l:"👤 العهدة",v:last?.custody_balance||0,c:"#D29922"}]
+          .map((b,i)=>(
+            <div key={i} className="bal-item" style={{background:"linear-gradient(135deg,#161B22,#1E2D45)"}}>
+              <div className="bal-lbl">{b.l}</div>
+              <div className="bal-val" style={{color:b.c}}>{fmt(b.v)}</div>
+            </div>
+          ))}
+      </div>
+
       <div className="rep-grid">
+        {/* المبيعات والمصروفات */}
         <div className="rcard">
-          <div className="rcard-t">💰 المبيعات</div>
-          <div className="rrow"><span className="rrow-l">كاش</span><div><span className="rrow-p">{pct(cashSales,totalSales)}</span><span className="rrow-v" style={{color:"#00D4AA"}}>{fmt(cashSales)}</span></div></div>
-          <div className="rrow"><span className="rrow-l">شبكة</span><div><span className="rrow-p">{pct(netSales,totalSales)}</span><span className="rrow-v" style={{color:"#58A6FF"}}>{fmt(netSales)}</span></div></div>
-          <div className="rrow"><span className="rrow-l" style={{fontWeight:600}}>الإجمالي</span><span className="rrow-v" style={{color:"#00D4AA",fontSize:14}}>{fmt(totalSales)}</span></div>
-          <div style={{marginTop:12,borderTop:"1px solid #21262D",paddingTop:11}}>
-            <div className="rcard-t">📦 المصروفات</div>
-            <div className="rrow"><span className="rrow-l">تشغيلية</span><div><span className="rrow-p">{pct(opExp,totalSales)}</span><span className="rrow-v">{fmt(opExp)}</span></div></div>
-            <div className="rrow"><span className="rrow-l">ثابتة</span><div><span className="rrow-p">{pct(fixedExp,totalSales)}</span><span className="rrow-v">{fmt(fixedExp)}</span></div></div>
-            <div className="rrow"><span className="rrow-l" style={{fontWeight:600}}>الإجمالي</span><span className="rrow-v" style={{color:"#DA3633",fontSize:14}}>{fmt(totalExp)}</span></div>
+          <div className="rcard-t" style={{color:"#00D4AA"}}>💰 المبيعات</div>
+          <SRow label="مبيعات كاش"    value={cashSales} pct={p(cashSales,total)} color="#00D4AA" indent/>
+          <SRow label="مبيعات شبكة"   value={netSales}  pct={p(netSales,total)}  color="#58A6FF" indent/>
+          <div className="section-divider"/>
+          <SRow label="إجمالي المبيعات" value={total} color="#00D4AA" bold/>
+
+          <div style={{marginTop:16}}>
+            <div className="rcard-t" style={{color:"#DA3633"}}>📦 المصروفات</div>
+            <SRow label="تشغيلية" value={opExp}    pct={p(opExp,total)}   color="#DA3633" indent negative/>
+            <SRow label="ثابتة"   value={fixedExp} pct={p(fixedExp,total)} color="#DA3633" indent negative/>
+            <div className="section-divider"/>
+            <SRow label="إجمالي المصروفات" value={opExp+fixedExp} color="#DA3633" bold negative/>
           </div>
         </div>
+
+        {/* الربحية */}
         <div className="rcard">
-          <div className="rcard-t">📊 الربحية</div>
-          <div className="rrow hl-g"><span className="rrow-l">مجمل الربح</span><span className="rrow-v" style={{color:"#D29922"}}>{fmt(gross)}</span></div>
-          <div className="rrow"><span className="rrow-l" style={{color:"#8B949E"}}>(-) الأقساط</span><span className="rrow-v" style={{color:"#DA3633"}}>({fmt(totalLoans)})</span></div>
-          <div className="rrow hl-b"><span className="rrow-l">صافي الربح</span><span className="rrow-v" style={{color:"#58A6FF"}}>{fmt(net)}</span></div>
-          <div className="rrow"><span className="rrow-l" style={{color:"#8B949E"}}>(-) المسحوبات</span><span className="rrow-v" style={{color:"#8B949E"}}>({fmt(totalWithd)})</span></div>
-          <div className="rrow hl-p"><span className="rrow-l" style={{fontWeight:600}}>صافي التدفق</span><span className="rrow-v" style={{color:"#8B5CF6",fontSize:14}}>{fmt(cashflow)}</span></div>
+          <div className="rcard-t" style={{color:"#D29922"}}>📊 الربحية</div>
+          <div style={{background:"rgba(210,153,34,0.08)",margin:"0 -15px",padding:"10px 15px",borderRadius:0}}>
+            <SRow label="مجمل الربح" value={gross} color="#D29922" bold pct={p(gross,total)}/>
+          </div>
+          <SRow label="(-) أقساط القروض" value={loans} color="#DA3633" indent negative pct={p(loans,total)}/>
+          <div style={{background:"rgba(88,166,255,0.08)",margin:"0 -15px",padding:"10px 15px"}}>
+            <SRow label="صافي الربح" value={net} color="#58A6FF" bold pct={p(net,total)}/>
+          </div>
+          <SRow label="(-) مسحوبات الشركاء" value={withd} color="#DA3633" indent negative pct={p(withd,total)}/>
+          <div style={{background:"rgba(139,92,246,0.08)",margin:"0 -15px",padding:"10px 15px",borderRadius:"0 0 8px 8px"}}>
+            <SRow label="صافي التدفق النقدي" value={cashflow} color="#8B5CF6" bold pct={p(cashflow,total)}/>
+          </div>
+
+          {/* المؤشرات */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}}>
+            {[{l:"هامش الربح",v:`${p(net,total)}`,c:"#58A6FF"},{l:"تغطية الديون",v:loans>0?`${((net+loans)/loans).toFixed(1)}x`:"—",c:"#D29922"}]
+              .map((k,i)=>(
+                <div key={i} style={{background:"#0D1117",border:"1px solid #21262D",borderRadius:6,padding:"8px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:10,color:"#8B949E"}}>{k.l}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:k.c,fontFamily:"JetBrains Mono"}}>{k.v}</div>
+                </div>
+              ))}
+          </div>
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+        {/* القروض والمسحوبات والضريبة */}
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div className="rcard">
-            <div className="rcard-t">🏛️ القروض الإجمالي</div>
+            <div className="rcard-t" style={{color:"#D29922"}}>🏛️ القروض</div>
             <table className="loan-t">
-              <thead><tr><th>القرض</th><th style={{textAlign:"center"}}>المسدد</th><th style={{textAlign:"left"}}>المتبقي</th></tr></thead>
+              <thead><tr><th>القرض</th><th style={{textAlign:"center"}}>المسدد</th><th style={{textAlign:"left",color:"#D29922"}}>المتبقي</th></tr></thead>
               <tbody>{loansData.filter(l=>l.original_amount>0).map((l,i)=>{
                 const paid = allLedger.filter(e=>e.type===`💳 ${l.name}`).reduce((s,e)=>s+(e.cash_out||0)+(e.bank_out||0)+(e.custody_out||0),0);
-                const rem  = l.original_amount - paid;
-                return <tr key={i}><td>{l.name}</td><td style={{textAlign:"center",color:"#8B949E"}}>{fmt(paid)}</td><td style={{textAlign:"left",color:"#D29922",fontWeight:600}}>{fmt(rem)}</td></tr>;
+                const rem  = Math.max(0,(l.original_amount||0)-paid);
+                const pct2 = l.original_amount>0?((paid/l.original_amount)*100).toFixed(0):0;
+                return (
+                  <tr key={i}>
+                    <td>{l.name}</td>
+                    <td style={{textAlign:"center"}}>
+                      <div style={{color:"#8B949E"}}>{fmt(paid)}</div>
+                      <div style={{fontSize:10,color:"#3FB950"}}>{pct2}%</div>
+                    </td>
+                    <td style={{textAlign:"left",color:"#D29922",fontWeight:600}}>{fmt(rem)}</td>
+                  </tr>
+                );
               })}</tbody>
             </table>
           </div>
+
           <div className="rcard">
-            <div className="rcard-t">💼 المسحوبات</div>
-            <div className="rrow"><span className="rrow-l">سليمان</span><span className="rrow-v">{fmt(sum("💼 مسحوبات سليمان",["cash_out","bank_out","custody_out"]))}</span></div>
-            <div className="rrow"><span className="rrow-l">أم طوبى</span><span className="rrow-v">{fmt(sum("💼 مسحوبات أم طوبى",["cash_out","bank_out","custody_out"]))}</span></div>
-            <div className="rrow"><span className="rrow-l" style={{fontWeight:600}}>الإجمالي</span><span className="rrow-v" style={{color:"#8B5CF6"}}>{fmt(totalWithd)}</span></div>
+            <div className="rcard-t" style={{color:"#8B5CF6"}}>💼 المسحوبات</div>
+            <SRow label="سليمان"  value={sum(["مسحوبات سليمان"],["cash_out","bank_out","custody_out"])} pct={p(sum(["مسحوبات سليمان"],["cash_out","bank_out","custody_out"]),total)}/>
+            <SRow label="أم طوبى" value={sum(["مسحوبات أم طوبى"],["cash_out","bank_out","custody_out"])} pct={p(sum(["مسحوبات أم طوبى"],["cash_out","bank_out","custody_out"]),total)}/>
+            <div className="section-divider"/>
+            <SRow label="الإجمالي" value={withd} color="#8B5CF6" bold pct={p(withd,total)}/>
           </div>
+
           <div className="rcard">
-            <div className="rcard-t">🧾 ضريبة القيمة المضافة</div>
-            <div className="rrow"><span className="rrow-l">ضريبة المبيعات 15%</span><span className="rrow-v">{fmt(totalSales*0.15)}</span></div>
-            <div className="rrow"><span className="rrow-l">ضريبة المشتريات</span><span className="rrow-v" style={{color:"#8B949E"}}>{fmt(vatPurchases)}</span></div>
-            <div className="vat-box"><div className="vat-l">المستحقة للدفع</div><div className="vat-v">{fmt(totalSales*0.15-vatPurchases)}</div></div>
+            <div className="rcard-t" style={{color:"#D29922"}}>🧾 ضريبة القيمة المضافة</div>
+            <SRow label="ضريبة المبيعات 15%" value={total*0.15}/>
+            <SRow label="ضريبة المشتريات"    value={vatPurch} color="#8B949E"/>
+            <div className="section-divider"/>
+            <div className="vat-box">
+              <div className="vat-l">💳 الضريبة المستحقة للدفع</div>
+              <div className="vat-v">{fmt(total*0.15-vatPurch)}</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
 // ══════════════════════════════════════════
 //  ٩. التطبيق الرئيسي
 // ══════════════════════════════════════════
@@ -788,6 +897,7 @@ export default function App() {
   const [projectId, setProj]  = useState(null);
   const [period, setPeriod]   = useState({ from: new Date().toISOString().slice(0,8)+"01", to: new Date().toISOString().slice(0,10) });
   const [pendingCount, setPending] = useState(0);
+  const [menuOpen, setMenu]   = useState(false);
 
   // استخدام PROJECT_ID مباشرة
   useEffect(()=>{
@@ -821,10 +931,14 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <div className="layout">
-        <aside className="sidebar">
-          <div className="brand"><div className="brand-name">⚙️ مزاهر</div><div className="brand-role">لوحة المحاسب</div></div>
+        <div className={`overlay-bg ${menuOpen?"show":""}`} onClick={()=>setMenu(false)}/>
+        <aside className={`sidebar ${menuOpen?"open":""}`}>
+          <div className="brand" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><div className="brand-name">⚙️ مزاهر</div><div className="brand-role">لوحة المحاسب</div></div>
+            <button className="mobile-menu-btn" style={{display:"flex"}} onClick={()=>setMenu(false)}>✕</button>
+          </div>
           {NAV.map(n=>(
-            <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>setPage(n.id)}>
+            <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>{setPage(n.id);setMenu(false);}}>
               <span className="nav-icon">{n.icon}</span>
               <span>{n.label}</span>
               {n.badge>0&&<span className="nav-badge">{n.badge}</span>}
@@ -836,7 +950,10 @@ export default function App() {
         </aside>
         <div className="content">
           <div className="topbar">
-            <div className="page-title">{NAV.find(n=>n.id===page)?.label}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <button className="mobile-menu-btn" onClick={()=>setMenu(true)}>☰</button>
+              <div className="page-title">{NAV.find(n=>n.id===page)?.label}</div>
+            </div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <div className="period-sel">
                 <span style={{fontSize:11,color:"#8B949E"}}>من</span>
