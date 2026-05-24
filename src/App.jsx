@@ -547,6 +547,241 @@ function ReportsPage({ projectId, period }) {
 // ══════════════════════════════════════════
 //  ٩. التطبيق الرئيسي
 // ══════════════════════════════════════════
+
+// ══════════════════════════════════════════
+//  قائمة الدخل
+// ══════════════════════════════════════════
+function IncomeStatement({ projectId, period }) {
+  const { data: ledger, loading } = useData("ledger_entries",
+    { filter: { "project_id": `eq.${projectId}`, "date_from": period.from, "date_to": period.to, "status": "eq.approved" }},
+    [projectId, period.from, period.to]);
+
+  if (loading) return <div className="page"><div className="loading">جاري التحميل...</div></div>;
+
+  const sumT = (types, cols) => ledger.filter(e => types.some(t => e.type && e.type.includes(t)))
+    .reduce((s,e) => s + cols.reduce((a,c) => a + (Number(e[c])||0), 0), 0);
+
+  const cashSales = ledger.filter(e=>e.type==="💵 مبيعات كاش").reduce((s,e)=>s+(e.cash_in||0),0);
+  const netSales  = ledger.filter(e=>e.type==="🏦 مبيعات شبكة").reduce((s,e)=>s+(e.bank_in||0),0);
+  const total     = cashSales + netSales;
+  const cogs      = sumT(["مصروفات تشغيلية"], ["cash_out","bank_out","custody_out"]);
+  const fixed     = sumT(["مصروفات ثابتة"],   ["cash_out","bank_out","custody_out"]);
+  const loans     = sumT(["قسط سيارة","قسط شراء أرض","قرض ١","قرض ٢"], ["cash_out","bank_out","custody_out"]);
+  const withd     = sumT(["مسحوبات سليمان","مسحوبات أم طوبى"], ["cash_out","bank_out","custody_out"]);
+  const gross     = total - cogs;
+  const opProfit  = gross - fixed;
+  const netProfit = opProfit - loans;
+  const cashflow  = netProfit - withd;
+  const p = v => total > 0 ? `${((v/total)*100).toFixed(1)}%` : "—";
+
+  const Row = ({label, value, color, bold, indent}) => (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+      padding:"9px 16px",paddingRight:indent?32:16,borderBottom:"1px solid #21262D",
+      background:bold?"rgba(255,255,255,0.03)":"transparent"}}>
+      <span style={{fontSize:13,color:bold?"#E6EDF3":"#C9D1D9",fontWeight:bold?"600":"400"}}>{label}</span>
+      <div style={{display:"flex",gap:24,alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#8B949E",minWidth:50,textAlign:"left"}}>{p(value)}</span>
+        <span style={{fontFamily:"JetBrains Mono",fontSize:13,fontWeight:bold?"700":"500",
+          color:color||(value>=0?"#E6EDF3":"#DA3633"),minWidth:100,textAlign:"left"}}>{fmt(value)}</span>
+      </div>
+    </div>
+  );
+
+  const Sec = ({title,bg}) => (
+    <div style={{background:bg||"#1A252F",padding:"7px 16px"}}>
+      <span style={{fontSize:10,fontWeight:700,color:"#FFF",textTransform:"uppercase",letterSpacing:1}}>{title}</span>
+    </div>
+  );
+
+  return (
+    <div className="page">
+      <div style={{maxWidth:640,background:"#161B22",borderRadius:10,overflow:"hidden",border:"1px solid #21262D"}}>
+        <div style={{background:"#1B4F72",padding:"14px 16px",display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:15,fontWeight:700,color:"#FFF"}}>📈 قائمة الدخل</span>
+          <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:"JetBrains Mono"}}>{period.from} — {period.to}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:24,padding:"6px 16px",background:"#21262D",fontSize:10,color:"#8B949E",fontWeight:600}}>
+          <span style={{minWidth:50}}>% من المبيعات</span><span style={{minWidth:100}}>المبلغ</span>
+        </div>
+        <Sec title="الإيرادات" bg="#0D4F3C"/>
+        <Row label="مبيعات كاش"  value={cashSales} color="#00D4AA" indent/>
+        <Row label="مبيعات شبكة" value={netSales}  color="#58A6FF" indent/>
+        <Row label="إجمالي الإيرادات" value={total} color="#00D4AA" bold/>
+        <Sec title="تكلفة المبيعات" bg="#4A1010"/>
+        <Row label="(-) مصروفات تشغيلية" value={-cogs}  color="#DA3633" indent/>
+        <Row label="مجمل الربح" value={gross} color={gross>=0?"#3FB950":"#DA3633"} bold/>
+        <Sec title="المصروفات التشغيلية" bg="#1A2F4A"/>
+        <Row label="(-) مصروفات ثابتة" value={-fixed} color="#DA3633" indent/>
+        <Row label="الربح التشغيلي" value={opProfit} color={opProfit>=0?"#58A6FF":"#DA3633"} bold/>
+        <Sec title="التمويل" bg="#2D1B4E"/>
+        <Row label="(-) أقساط القروض" value={-loans} color="#DA3633" indent/>
+        <Row label="صافي الربح" value={netProfit} color={netProfit>=0?"#8B5CF6":"#DA3633"} bold/>
+        <Sec title="توزيع الأرباح" bg="#1A2020"/>
+        <Row label="(-) مسحوبات الشركاء" value={-withd} color="#DA3633" indent/>
+        <Row label="صافي التدفق النقدي" value={cashflow} color={cashflow>=0?"#D29922":"#DA3633"} bold/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,padding:14,background:"#0D1117"}}>
+          {[{l:"هامش الربح الإجمالي",v:total>0?(gross/total*100):0,c:"#3FB950"},
+            {l:"هامش صافي الربح",v:total>0?(netProfit/total*100):0,c:"#8B5CF6"},
+            {l:"نسبة تغطية الديون",v:loans>0?((netProfit+loans)/loans):0,c:"#D29922",x:"x"}]
+            .map((k,i)=>(
+              <div key={i} style={{background:"#161B22",border:"1px solid #21262D",borderRadius:8,padding:"10px",textAlign:"center"}}>
+                <div style={{fontSize:10,color:"#8B949E",marginBottom:4}}>{k.l}</div>
+                <div style={{fontSize:15,fontWeight:700,color:k.c,fontFamily:"JetBrains Mono"}}>{k.v.toFixed(1)}{k.x||"%"}</div>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════
+//  الميزانية العمومية
+// ══════════════════════════════════════════
+function BalanceSheet({ projectId }) {
+  const { data: ledger } = useData("ledger_with_balances",
+    { filter: { "project_id": `eq.${projectId}` }, order: "date.asc,created_at.asc" }, [projectId]);
+  const { data: loans }  = useData("loans",
+    { filter: { "project_id": `eq.${projectId}` } }, [projectId]);
+
+  const last    = ledger[ledger.length-1];
+  const cashBal = last?.cash_balance    || 0;
+  const bankBal = last?.bank_balance    || 0;
+  const custBal = last?.custody_balance || 0;
+  const totalAssets = Math.max(0,cashBal)+Math.max(0,bankBal)+Math.max(0,custBal);
+
+  const loanPaid = name => ledger.filter(e=>e.type===`💳 ${name}`)
+    .reduce((s,e)=>s+(e.cash_out||0)+(e.bank_out||0)+(e.custody_out||0),0);
+
+  const totalLiab = loans.reduce((s,l)=>s+Math.max(0,(l.original_amount||0)-loanPaid(l.name)),0);
+  const equity    = totalAssets - totalLiab;
+  const balanced  = Math.abs(totalAssets-(totalLiab+equity)) < 1;
+
+  const Row = ({label,value,color,bold,indent}) => (
+    <div style={{display:"flex",justifyContent:"space-between",padding:"8px 16px",
+      paddingRight:indent?32:16,borderBottom:"1px solid #21262D",background:bold?"rgba(255,255,255,0.03)":"transparent"}}>
+      <span style={{fontSize:13,color:bold?"#E6EDF3":"#C9D1D9",fontWeight:bold?"600":"400"}}>{label}</span>
+      <span style={{fontFamily:"JetBrains Mono",fontSize:13,fontWeight:bold?"700":"500",
+        color:color||(value>=0?"#E6EDF3":"#DA3633")}}>{fmt(value)}</span>
+    </div>
+  );
+  const Sec = ({title,bg}) => (
+    <div style={{background:bg||"#1A252F",padding:"7px 16px"}}>
+      <span style={{fontSize:10,fontWeight:700,color:"#FFF",textTransform:"uppercase",letterSpacing:1}}>{title}</span>
+    </div>
+  );
+
+  return (
+    <div className="page">
+      <div style={{maxWidth:520,background:"#161B22",borderRadius:10,overflow:"hidden",border:"1px solid #21262D"}}>
+        <div style={{background:"#1B4F72",padding:"14px 16px"}}>
+          <span style={{fontSize:15,fontWeight:700,color:"#FFF"}}>⚖️ الميزانية العمومية</span>
+        </div>
+        <Sec title="الأصول المتداولة" bg="#0D4F3C"/>
+        <Row label="نقد في الصندوق" value={cashBal} color="#3FB950" indent/>
+        <Row label="رصيد البنك"      value={bankBal} color={bankBal>=0?"#58A6FF":"#DA3633"} indent/>
+        <Row label="رصيد العهدة"     value={custBal} color="#D29922" indent/>
+        <Row label="إجمالي الأصول"  value={totalAssets} color="#3FB950" bold/>
+        <Sec title="الالتزامات — القروض" bg="#4A1010"/>
+        {loans.filter(l=>l.original_amount>0).map((l,i)=>(
+          <Row key={i} label={l.name} value={Math.max(0,(l.original_amount||0)-loanPaid(l.name))} color="#DA3633" indent/>
+        ))}
+        <Row label="إجمالي الالتزامات" value={totalLiab} color="#DA3633" bold/>
+        <Sec title="حقوق الملكية" bg="#2D1B4E"/>
+        <Row label="صافي حقوق الملكية" value={equity} color={equity>=0?"#8B5CF6":"#DA3633"} bold/>
+        <div style={{padding:"12px 16px",background:balanced?"rgba(63,185,80,0.1)":"rgba(218,54,51,0.1)",
+          display:"flex",justifyContent:"center",borderTop:"2px solid #21262D"}}>
+          <span style={{fontSize:13,fontWeight:700,color:balanced?"#3FB950":"#DA3633"}}>
+            {balanced?"✅ الميزانية متوازنة":"❌ الميزانية غير متوازنة"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════
+//  ميزان المراجعة
+// ══════════════════════════════════════════
+function TrialBalance({ projectId, period }) {
+  const { data: ledger, loading } = useData("ledger_entries",
+    { filter: { "project_id": `eq.${projectId}`, "date_from": period.from, "date_to": period.to, "status": "eq.approved" }},
+    [projectId, period.from, period.to]);
+
+  if (loading) return <div className="page"><div className="loading">جاري التحميل...</div></div>;
+
+  const accounts = {};
+  const add = (name, d, c) => {
+    if (!accounts[name]) accounts[name] = {debit:0,credit:0};
+    accounts[name].debit  += d||0;
+    accounts[name].credit += c||0;
+  };
+
+  ledger.forEach(e=>{
+    if (e.cash_out)    add("الصندوق", 0, e.cash_out);
+    if (e.cash_in)     add("الصندوق", e.cash_in, 0);
+    if (e.bank_out)    add("البنك", 0, e.bank_out);
+    if (e.bank_in)     add("البنك", e.bank_in, 0);
+    if (e.custody_out) add("العهدة", 0, e.custody_out);
+    if (e.custody_in)  add("العهدة", e.custody_in, 0);
+    const t   = e.type||"";
+    const amt = (e.cash_out||0)+(e.bank_out||0)+(e.custody_out||0);
+    const amtIn=(e.cash_in||0)+(e.bank_in||0)+(e.custody_in||0);
+    if(t.includes("مبيعات كاش"))       add("إيرادات كاش",0,amtIn);
+    if(t.includes("مبيعات شبكة"))      add("إيرادات شبكة",0,amtIn);
+    if(t.includes("مصروفات تشغيلية"))  add("مصروفات تشغيلية",amt,0);
+    if(t.includes("مصروفات ثابتة"))    add("مصروفات ثابتة",amt,0);
+    if(t.includes("قسط")||t.includes("قرض")) add("سداد القروض",amt,0);
+    if(t.includes("مسحوبات"))          add("مسحوبات الشركاء",amt,0);
+    if(t.includes("ضريبة"))            add("ضريبة القيمة المضافة",amt,0);
+  });
+
+  const entries  = Object.entries(accounts);
+  const totalD   = entries.reduce((s,[,v])=>s+v.debit,0);
+  const totalC   = entries.reduce((s,[,v])=>s+v.credit,0);
+  const balanced = Math.abs(totalD-totalC)<1;
+
+  return (
+    <div className="page">
+      <div style={{maxWidth:680,background:"#161B22",borderRadius:10,overflow:"hidden",border:"1px solid #21262D"}}>
+        <div style={{background:"#1B4F72",padding:"14px 16px",display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:15,fontWeight:700,color:"#FFF"}}>✅ ميزان المراجعة</span>
+          <span style={{fontSize:11,color:"rgba(255,255,255,0.6)",fontFamily:"JetBrains Mono"}}>{period.from} — {period.to}</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",padding:"7px 16px",
+          background:"#21262D",fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase"}}>
+          <span>الحساب</span><span>مدين</span><span>دائن</span><span>الرصيد</span>
+        </div>
+        {entries.map(([name,v],i)=>{
+          const bal=v.debit-v.credit;
+          return (
+            <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",
+              padding:"8px 16px",borderBottom:"1px solid #21262D",
+              background:i%2===0?"#161B22":"rgba(255,255,255,0.01)"}}>
+              <span style={{fontSize:12,color:"#C9D1D9"}}>{name}</span>
+              <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:"#58A6FF"}}>{fmt(v.debit)}</span>
+              <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:"#DA3633"}}>{fmt(v.credit)}</span>
+              <span style={{fontFamily:"JetBrains Mono",fontSize:12,fontWeight:600,color:bal>=0?"#3FB950":"#DA3633"}}>{fmt(bal)}</span>
+            </div>
+          );
+        })}
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",padding:"10px 16px",background:"#21262D",fontWeight:700}}>
+          <span style={{fontSize:12,color:"#FFF"}}>الإجمالي</span>
+          <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:"#58A6FF"}}>{fmt(totalD)}</span>
+          <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:"#DA3633"}}>{fmt(totalC)}</span>
+          <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:balanced?"#3FB950":"#DA3633"}}>{fmt(totalD-totalC)}</span>
+        </div>
+        <div style={{padding:"13px 16px",background:balanced?"rgba(63,185,80,0.1)":"rgba(218,54,51,0.1)",
+          textAlign:"center",borderTop:"2px solid #21262D"}}>
+          <span style={{fontSize:13,fontWeight:700,color:balanced?"#3FB950":"#DA3633"}}>
+            {balanced?"✅ ميزان المراجعة متوازن — لا توجد أخطاء إدخال":`❌ غير متوازن — فرق: ${fmt(totalD-totalC)} ريال`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [page, setPage]       = useState("review");
   const [projectId, setProj]  = useState(null);
@@ -566,9 +801,12 @@ export default function App() {
   },[projectId,page]);
 
   const NAV = [
-    {id:"review", icon:"📋", label:"مراجعة الحركات", badge:pendingCount},
-    {id:"ledger", icon:"📒", label:"الدفتر الأمريكي", badge:0},
-    {id:"reports",icon:"📊", label:"التقارير",        badge:0},
+    {id:"review",   icon:"📋", label:"مراجعة الحركات",    badge:pendingCount},
+    {id:"ledger",   icon:"📒", label:"الدفتر الأمريكي",   badge:0},
+    {id:"reports",  icon:"📊", label:"التقارير",           badge:0},
+    {id:"income",   icon:"📈", label:"قائمة الدخل",       badge:0},
+    {id:"balance",  icon:"⚖️", label:"الميزانية العمومية", badge:0},
+    {id:"trial",    icon:"✅", label:"ميزان المراجعة",     badge:0},
   ];
 
   if(!projectId) return (
@@ -605,9 +843,12 @@ export default function App() {
               <input className="pinput" value={period.to}   onChange={e=>setPeriod(p=>({...p,to:e.target.value}))}/>
             </div>
           </div>
-          {page==="review"  && <ReviewPage  projectId={projectId} period={period}/>}
-          {page==="ledger"  && <LedgerPage  projectId={projectId} period={period}/>}
-          {page==="reports" && <ReportsPage projectId={projectId} period={period}/>}
+          {page==="review"  && <ReviewPage       projectId={projectId} period={period}/>}
+          {page==="ledger"  && <LedgerPage       projectId={projectId} period={period}/>}
+          {page==="reports" && <ReportsPage      projectId={projectId} period={period}/>}
+          {page==="income"  && <IncomeStatement  projectId={projectId} period={period}/>}
+          {page==="balance" && <BalanceSheet     projectId={projectId} period={period}/>}
+          {page==="trial"   && <TrialBalance     projectId={projectId} period={period}/>}
         </div>
       </div>
     </>
