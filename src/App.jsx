@@ -218,6 +218,7 @@ body{background:#0D1117;color:#C9D1D9;font-family:'IBM Plex Sans Arabic',sans-se
 .vat-box{background:rgba(210,153,34,0.08);border:1px solid rgba(210,153,34,0.25);border-radius:7px;padding:12px;text-align:center;margin-top:10px}
 .vat-l{font-size:11px;color:#D29922;margin-bottom:3px}
 .vat-v{font-size:20px;font-weight:700;color:#D29922;font-family:'JetBrains Mono',monospace}
+  @media print{.sidebar,.topbar,button{display:none!important}.content{margin-right:0!important}.layout{display:block!important}.page{padding:10px!important}body{background:white!important}}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center}
 .modal{background:#161B22;border:1px solid #30363D;border-radius:12px;padding:24px;width:500px;max-height:85vh;overflow-y:auto}
 .modal-title{font-size:15px;font-weight:700;color:#E6EDF3;margin-bottom:18px}
@@ -836,11 +837,18 @@ export default function App() {
         <div className="content">
           <div className="topbar">
             <div className="page-title">{NAV.find(n=>n.id===page)?.label}</div>
-            <div className="period-sel">
-              <span style={{fontSize:11,color:"#8B949E"}}>من</span>
-              <input className="pinput" value={period.from} onChange={e=>setPeriod(p=>({...p,from:e.target.value}))}/>
-              <span style={{fontSize:11,color:"#8B949E"}}>إلى</span>
-              <input className="pinput" value={period.to}   onChange={e=>setPeriod(p=>({...p,to:e.target.value}))}/>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <div className="period-sel">
+                <span style={{fontSize:11,color:"#8B949E"}}>من</span>
+                <input className="pinput" value={period.from} onChange={e=>setPeriod(p=>({...p,from:e.target.value}))}/>
+                <span style={{fontSize:11,color:"#8B949E"}}>إلى</span>
+                <input className="pinput" value={period.to}   onChange={e=>setPeriod(p=>({...p,to:e.target.value}))}/>
+              </div>
+              {["reports","income","balance","trial"].includes(page) && (
+                <button onClick={()=>window.print()} style={{padding:"5px 12px",background:"#238636",color:"#fff",border:"none",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"IBM Plex Sans Arabic"}}>
+                  🖨️ طباعة / PDF
+                </button>
+              )}
             </div>
           </div>
           {page==="review"  && <ReviewPage       projectId={projectId} period={period}/>}
