@@ -938,13 +938,31 @@ function JournalPage({ projectId, period }) {
   const buildLines = (entries) => {
     const lines = [];
     entries.forEach(e => {
-      const map    = ACCOUNT_MAP[e.type];
-      const amount = (e.cash_out||0)+(e.cash_in||0)+(e.bank_out||0)+(e.bank_in||0)+(e.custody_out||0)+(e.custody_in||0);
-      if (!amount || amount <= 0) return;
-      const debit  = map?.debit  || e.type;
-      const credit = map?.credit || getSource(e);
-      if (debit && credit && debit !== credit) {
-        lines.push({ debit, credit, amount, desc: e.description || e.type });
+      const map = ACCOUNT_MAP[e.type];
+      if (!map) return;
+
+      // تجاهل صرف العهدة — تسوية داخلية
+      if (e.type === "👤 صرف عهدة") return;
+
+      // كل مصدر دفع = سطر قيد منفصل
+      const cashAmt    = (e.cash_out||0)    + (e.cash_in||0);
+      const bankAmt    = (e.bank_out||0)    + (e.bank_in||0);
+      const custodyAmt = (e.custody_out||0) + (e.custody_in||0);
+
+      if (cashAmt > 0) {
+        const debit  = map.debit  || e.type;
+        const credit = map.credit || "الصندوق";
+        if (debit !== credit) lines.push({ debit, credit, amount: cashAmt, desc: e.description || e.type });
+      }
+      if (bankAmt > 0) {
+        const debit  = map.debit  || e.type;
+        const credit = map.credit || "البنك";
+        if (debit !== credit) lines.push({ debit, credit, amount: bankAmt, desc: e.description || e.type });
+      }
+      if (custodyAmt > 0) {
+        const debit  = map.debit  || e.type;
+        const credit = map.credit || "العهدة";
+        if (debit !== credit) lines.push({ debit, credit, amount: custodyAmt, desc: e.description || e.type });
       }
     });
     return lines;
