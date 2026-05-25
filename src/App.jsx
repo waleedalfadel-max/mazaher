@@ -892,6 +892,156 @@ function TrialBalance({ projectId, period }) {
   );
 }
 
+
+// ══════════════════════════════════════════
+//  شاشة القيود المحاسبية
+// ══════════════════════════════════════════
+function JournalPage({ projectId, period }) {
+  const { data: ledger, loading } = useData("ledger_entries",
+    { filter: { "project_id": `eq.${projectId}`, "date_from": period.from, "date_to": period.to, "status": "eq.approved" }, order: "date.asc,created_at.asc" },
+    [projectId, period.from, period.to]);
+
+  if (loading) return <div className="page"><div className="loading">⏳ جاري التحميل...</div></div>;
+
+  // بناء القيود اليومية
+  const ACCOUNT_MAP = {
+    "💵 مبيعات كاش":           { debit: "الصندوق",              credit: "إيرادات المبيعات" },
+    "🏦 مبيعات شبكة":          { debit: "البنك",                credit: "إيرادات المبيعات" },
+    "🛒 مصروفات تشغيلية":      { debit: "مصروفات تشغيلية",      credit: null },
+    "💰 مصروفات ثابتة":        { debit: "مصروفات ثابتة",        credit: null },
+    "💳 قسط سيارة":            { debit: "قسط سيارة",            credit: "البنك" },
+    "💳 قسط شراء أرض":         { debit: "قسط شراء أرض",         credit: "البنك" },
+    "💳 قرض ١":                { debit: "قرض ١",                credit: "البنك" },
+    "💳 قرض ٢":                { debit: "قرض ٢",                credit: "البنك" },
+    "💼 مسحوبات سليمان":       { debit: "مسحوبات سليمان",       credit: null },
+    "💼 مسحوبات أم طوبى":      { debit: "مسحوبات أم طوبى",      credit: null },
+    "🏛️ ضريبة القيمة المضافة": { debit: "ضريبة القيمة المضافة", credit: null },
+  };
+
+  const getSource = (e) => {
+    if ((e.cash_out||0)+(e.cash_in||0) > 0)       return "الصندوق";
+    if ((e.bank_out||0)+(e.bank_in||0) > 0)        return "البنك";
+    if ((e.custody_out||0)+(e.custody_in||0) > 0)  return "العهدة";
+    return "—";
+  };
+
+  // جمع حسب التاريخ
+  const byDate = {};
+  ledger.forEach(e => {
+    if (!e.date || !e.type) return;
+    if (!byDate[e.date]) byDate[e.date] = [];
+    byDate[e.date].push(e);
+  });
+
+  const dates = Object.keys(byDate).sort();
+
+  const buildLines = (entries) => {
+    const lines = [];
+    entries.forEach(e => {
+      const map    = ACCOUNT_MAP[e.type];
+      const amount = (e.cash_out||0)+(e.cash_in||0)+(e.bank_out||0)+(e.bank_in||0)+(e.custody_out||0)+(e.custody_in||0);
+      if (!amount || amount <= 0) return;
+      const debit  = map?.debit  || e.type;
+      const credit = map?.credit || getSource(e);
+      if (debit && credit && debit !== credit) {
+        lines.push({ debit, credit, amount, desc: e.description || e.type });
+      }
+    });
+    return lines;
+  };
+
+  const totalUnbalanced = dates.filter(d => {
+    const lines = buildLines(byDate[d]);
+    const td = lines.reduce((s,l)=>s+l.amount,0);
+    const tc = lines.reduce((s,l)=>s+l.amount,0);
+    return Math.abs(td-tc) >= 0.01;
+  }).length;
+
+  return (
+    <div className="page">
+      {/* ملخص */}
+      <div style={{display:"flex",gap:12,marginBottom:20}}>
+        {[
+          {l:"عدد القيود",     v:dates.length,      c:"#58A6FF", icon:"📒"},
+          {l:"قيود متوازنة",   v:dates.length - totalUnbalanced, c:"#3FB950", icon:"✅"},
+          {l:"قيود غير متوازنة", v:totalUnbalanced, c:totalUnbalanced>0?"#DA3633":"#3FB950", icon:"⚠️"},
+        ].map((s,i)=>(
+          <div key={i} style={{background:"#161B22",border:`1px solid ${s.c}33`,borderRadius:10,padding:"12px 16px",flex:1,textAlign:"center"}}>
+            <div style={{fontSize:22,marginBottom:4}}>{s.icon}</div>
+            <div style={{fontSize:22,fontWeight:700,color:s.c,fontFamily:"JetBrains Mono"}}>{s.v}</div>
+            <div style={{fontSize:11,color:"#8B949E"}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* القيود */}
+      {dates.map((date, di) => {
+        const entries = byDate[date];
+        const lines   = buildLines(entries);
+        if (!lines.length) return null;
+        const totalD   = lines.reduce((s,l)=>s+l.amount,0);
+        const totalC   = lines.reduce((s,l)=>s+l.amount,0);
+        const balanced = Math.abs(totalD-totalC) < 0.01;
+        const vNo      = String(di+1).padStart(4,"0");
+
+        return (
+          <div key={date} style={{background:"#161B22",border:`1px solid ${balanced?"#21262D":"#DA3633"}`,borderRadius:10,marginBottom:12,overflow:"hidden"}}>
+            {/* رأس القيد */}
+            <div style={{background:balanced?"#1B4F72":"#7B241C",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{background:"rgba(255,255,255,0.15)",borderRadius:6,padding:"3px 10px",fontSize:12,fontFamily:"JetBrains Mono",color:"#fff",fontWeight:700}}>
+                  قيد {vNo}
+                </span>
+                <span style={{fontSize:13,color:"#fff",fontWeight:600}}>{date}</span>
+              </div>
+              <span style={{fontSize:12,color:balanced?"#3FB950":"#DA3633",fontWeight:700}}>
+                {balanced ? "✅ متوازن" : "❌ غير متوازن"}
+              </span>
+            </div>
+
+            {/* رأس الجدول */}
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",padding:"7px 16px",background:"#21262D",fontSize:10,color:"#8B949E",fontWeight:600,textTransform:"uppercase",gap:8}}>
+              <span>البيان / الحساب</span><span style={{textAlign:"left"}}>مدين</span><span style={{textAlign:"left"}}>دائن</span>
+            </div>
+
+            {/* سطور القيد */}
+            {lines.map((line, li) => (
+              <div key={li}>
+                {/* مدين */}
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",padding:"7px 16px",borderBottom:"1px solid #21262D30",background:"rgba(88,166,255,0.03)",gap:8}}>
+                  <span style={{fontSize:12,color:"#C9D1D9"}}>{line.debit} — {line.desc}</span>
+                  <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:"#58A6FF",fontWeight:600}}>{fmt(line.amount)}</span>
+                  <span style={{color:"#2D333B"}}>—</span>
+                </div>
+                {/* دائن */}
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",padding:"7px 16px",paddingRight:32,borderBottom:"1px solid #21262D",background:"rgba(218,54,51,0.02)",gap:8}}>
+                  <span style={{fontSize:12,color:"#8B949E"}}>من / {line.credit}</span>
+                  <span style={{color:"#2D333B"}}>—</span>
+                  <span style={{fontFamily:"JetBrains Mono",fontSize:12,color:"#DA3633",fontWeight:600}}>{fmt(line.amount)}</span>
+                </div>
+              </div>
+            ))}
+
+            {/* الإجمالي */}
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",padding:"9px 16px",background:balanced?"rgba(63,185,80,0.08)":"rgba(218,54,51,0.08)",gap:8}}>
+              <span style={{fontSize:12,fontWeight:700,color:"#E6EDF3"}}>الإجمالي</span>
+              <span style={{fontFamily:"JetBrains Mono",fontSize:13,color:"#58A6FF",fontWeight:700}}>{fmt(totalD)}</span>
+              <span style={{fontFamily:"JetBrains Mono",fontSize:13,color:"#DA3633",fontWeight:700}}>{fmt(totalC)}</span>
+            </div>
+          </div>
+        );
+      })}
+
+      {dates.length === 0 && (
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#8B949E"}}>
+          <div style={{fontSize:48,marginBottom:12}}>📒</div>
+          <div>لا توجد قيود في هذه الفترة</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [page, setPage]       = useState("review");
   const [projectId, setProj]  = useState(null);
@@ -918,6 +1068,7 @@ export default function App() {
     {id:"income",   icon:"📈", label:"قائمة الدخل",       badge:0},
     {id:"balance",  icon:"⚖️", label:"الميزانية العمومية", badge:0},
     {id:"trial",    icon:"✅", label:"ميزان المراجعة",     badge:0},
+    {id:"journal",  icon:"📒", label:"القيود المحاسبية",   badge:0},
   ];
 
   if(!projectId) return (
@@ -974,6 +1125,7 @@ export default function App() {
           {page==="income"  && <IncomeStatement  projectId={projectId} period={period}/>}
           {page==="balance" && <BalanceSheet     projectId={projectId} period={period}/>}
           {page==="trial"   && <TrialBalance     projectId={projectId} period={period}/>}
+          {page==="journal" && <JournalPage      projectId={projectId} period={period}/>}
         </div>
       </div>
     </>
