@@ -1195,7 +1195,10 @@ function JournalPage({projectId,period}){
         const lines=buildLines(byDate[date]);
         if(!lines.length)return null;
         const total=lines.reduce((s,l)=>s+l.amt,0);
-        const vNo=String(di+1).padStart(4,"0");
+        // رقم القيد من Supabase مباشرة
+        const dayEntries = byDate[date];
+        const jNo = dayEntries.find(e=>e.journal_no)?.journal_no;
+        const vNo = jNo ? jNo.toString().padStart(4,"0") : String(di+1).padStart(4,"0");
         return(
           <div key={date} className="j-card">
             <div className="j-header">
