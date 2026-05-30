@@ -794,12 +794,20 @@ function ReportsPage({projectId,period}){
         </div>
       </div>
 
-      <div className="kpi-grid">
-        <KPI label="إجمالي المبيعات" value={total}       color="#3B6BF5" icon="💰" sub={`كاش: ${fmt(cashSales)}`}/>
-        <KPI label="مجمل الربح"      value={gross}       color="#D97706" icon="📦" badge={pct(gross,total)}       badgeStyle={{background:"#FEF3C7",color:"#D97706"}}/>
-        <KPI label="صافي الربح"      value={netProfit}   color="#16A34A" icon="📈" badge={pct(netProfit,total)}   badgeStyle={{background:"#DCFCE7",color:"#16A34A"}}/>
-        <KPI label="صافي التدفق"     value={cashflow}    color="#7C3AED" icon="💸" sub="بعد المسحوبات"/>
-      </div>
+      {/* حساب متوسط المبيعات اليومية */}
+      {(()=>{
+        const days = new Set(ledger.filter(e=>(e.type||"").includes("مبيعات")).map(e=>e.date)).size;
+        const dailyAvg = days > 0 ? total / days : 0;
+        return(
+          <div className="kpi-grid" style={{gridTemplateColumns:"repeat(5,1fr)"}}>
+            <KPI label="إجمالي المبيعات" value={total}       color="#3B6BF5" icon="💰" sub={`كاش: ${fmt(cashSales)}`}/>
+            <KPI label="متوسط اليومي"    value={dailyAvg}    color="#0EA5C4" icon="📅" sub={`${days} يوم عمل`}/>
+            <KPI label="مجمل الربح"      value={gross}       color="#D97706" icon="📦" badge={pct(gross,total)}       badgeStyle={{background:"#FEF3C7",color:"#D97706"}}/>
+            <KPI label="صافي الربح"      value={netProfit}   color="#16A34A" icon="📈" badge={pct(netProfit,total)}   badgeStyle={{background:"#DCFCE7",color:"#16A34A"}}/>
+            <KPI label="صافي التدفق"     value={cashflow}    color="#7C3AED" icon="💸" sub="بعد المسحوبات"/>
+          </div>
+        );
+      })()}
 
       <div className="bal-row" style={{marginBottom:20}}>
         {[
