@@ -616,10 +616,10 @@ function ReviewPage({projectId,period}){
 // ═══════════════════════════════════════
 //  الدفتر الأمريكي
 // ═══════════════════════════════════════
-function LedgerPage({projectId}){
+function LedgerPage({projectId,period}){
   const {data:raw,loading,error,reload}=useData("ledger_entries",
-    {filter:{"project_id":`eq.${projectId}`,"status":"eq.approved"},order:"date.asc,created_at.asc"},
-    [projectId]);
+    {filter:{"project_id":`eq.${projectId}`,"status":"eq.approved","date_from":period.from,"date_to":period.to},order:"date.asc,created_at.asc"},
+    [projectId,period.from,period.to]);
   const [search,setSearch]=useState("");
   const [typeF,setTypeF]=useState("");
   const [modal,setModal]=useState(false);
@@ -988,8 +988,8 @@ function IncomeStatement({projectId,period}){
 // ═══════════════════════════════════════
 //  الميزانية العمومية
 // ═══════════════════════════════════════
-function BalanceSheet({projectId}){
-  const {data:allLedger}=useData("ledger_entries",{filter:{"project_id":`eq.${projectId}`,"status":"eq.approved"},order:"date.asc,created_at.asc"},[projectId]);
+function BalanceSheet({projectId,period}){
+  const {data:allLedger}=useData("ledger_entries",{filter:{"project_id":`eq.${projectId}`,"status":"eq.approved","date_from":period.from,"date_to":period.to},order:"date.asc,created_at.asc"},[projectId,period.from,period.to]);
   const {data:loans}=useData("loans",{filter:{"project_id":`eq.${projectId}`}},[projectId]);
   const balances=useMemo(()=>computeBalances(allLedger),[allLedger]);
   const last=balances[balances.length-1];
@@ -999,10 +999,13 @@ function BalanceSheet({projectId}){
   const loanPaid=name=>allLedger.filter(e=>(e.type||"").includes((name||"").replace("💳 ","").trim()))
     .reduce((s,e)=>s+(e.cash_out||0)+(e.bank_out||0)+(e.custody_out||0),0);
 
-  const loanDets=loans.filter(l=>(l.original_amount||0)>0).map(l=>({
-    name:l.name,total:l.original_amount||0,
-    paid:loanPaid(l.name),rem:Math.max(0,(l.original_amount||0)-loanPaid(l.name))
-  }));
+  // نحسب المسدد من كل تاريخ البيانات (مو الفترة المختارة)
+  const loanDets=loans.filter(l=>(l.original_amount||0)>0).map(l=>{
+    const name=(l.name||"").replace("💳 ","").trim();
+    const paid=allLedger.filter(e=>(e.type||"").includes(name))
+      .reduce((s,e)=>s+(e.cash_out||0)+(e.bank_out||0)+(e.custody_out||0),0);
+    return {name:l.name,total:l.original_amount||0,paid,rem:Math.max(0,(l.original_amount||0)-paid)};
+  });
   const totalLiab=loanDets.reduce((s,l)=>s+l.rem,0);
   const equity=totalAssets-totalLiab;
   const balanced=Math.abs(totalAssets-(totalLiab+equity))<0.01;
@@ -1079,6 +1082,10 @@ function TrialBalance({projectId,period}){
     if(e.bank_out>0)add("البنك",    0,e.bank_out,"أصول");
     if(e.custody_in >0)add("ح/أمين الصندوق",e.custody_in, 0,"أصول");
     if(e.custody_out>0)add("ح/أمين الصندوق",0,e.custody_out,"أصول");
+    // رسوم التحويلات — تُسجل كمصروف ومقابلها البنك
+    if(e.bank_out>0 && (e.type||"").includes("رسوم")) {
+      add("رسوم بنكية",e.bank_out,0,"مصروفات");
+    }
     const t=e.type||"";
     if(t.includes("مبيعات كاش"))  add("إيرادات المبيعات النقدية",   0,e.cash_in||0,"إيرادات");
     if(t.includes("مبيعات شبكة")) add("إيرادات المبيعات الإلكترونية",0,e.bank_in||0,"إيرادات");
@@ -1312,10 +1319,10 @@ export default function App(){
             <div className="topbar-date">{period.from} ← {period.to}</div>
           </div>
           {page==="review"  &&<ReviewPage      projectId={PROJECT_ID} period={period}/>}
-          {page==="ledger"  &&<LedgerPage       projectId={PROJECT_ID}/>}
+          {page==="ledger"  &&<LedgerPage       projectId={PROJECT_ID} period={period}/>}
           {page==="reports" &&<ReportsPage      projectId={PROJECT_ID} period={period}/>}
           {page==="income"  &&<IncomeStatement  projectId={PROJECT_ID} period={period}/>}
-          {page==="balance" &&<BalanceSheet     projectId={PROJECT_ID}/>}
+          {page==="balance" &&<BalanceSheet     projectId={PROJECT_ID} period={period}/>}
           {page==="trial"   &&<TrialBalance     projectId={PROJECT_ID} period={period}/>}
           {page==="journal" &&<JournalPage      projectId={PROJECT_ID} period={period}/>}
         </div>
