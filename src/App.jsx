@@ -417,6 +417,9 @@ html,body{height:100%;background:var(--bg);color:var(--t0);font-family:'Cairo',s
 /* ── Empty ── */
 .empty{text-align:center;padding:60px 20px;color:var(--t2)}
 .empty-icon{font-size:48px;margin-bottom:12px;opacity:.3}
+.kpi-tooltip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#E2E6F0;color:#64748B;font-size:10px;font-weight:700;cursor:help;margin-right:4px;flex-shrink:0}
+.kpi-tooltip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);right:50%;transform:translateX(50%);background:#0F172A;color:#FFF;font-size:11px;padding:7px 10px;border-radius:7px;white-space:pre-line;min-width:200px;max-width:260px;z-index:100;border:1px solid #1E293B;line-height:1.6;text-align:right;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.kpi-tooltip:hover::before{content:"";position:absolute;bottom:calc(100% + 1px);right:50%;transform:translateX(50%);border:5px solid transparent;border-top-color:#0F172A}
 
 /* ── Loading ── */
 .loading-wrap{display:flex;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--t2);font-size:13px}
@@ -452,12 +455,15 @@ const Loader = () => (
 );
 const Err = ({msg}) => <div className="err">⚠ {msg}</div>;
 
-function KPI({label,value,sub,color="#3B6BF5",icon,badge,badgeStyle}){
+function KPI({label,value,sub,color="#3B6BF5",icon,badge,badgeStyle,tooltip}){
   return(
     <div className="kpi" style={{"--kpi-color":color}}>
       <div className="kpi-stripe"/>
       {icon&&<div className="kpi-icon">{icon}</div>}
-      <div className="kpi-label">{label}</div>
+      <div className="kpi-label" style={{display:"flex",alignItems:"center",gap:4}}>
+        {label}
+        {tooltip&&<span className="kpi-tooltip" data-tip={tooltip}>?</span>}
+      </div>
       <div className="kpi-value" style={{color}}>{typeof value==="number"?fmt(value):value}</div>
       <div className="kpi-sub">
         {badge&&<span className="kpi-badge" style={badgeStyle||{background:`${color}18`,color}}>{badge}</span>}
@@ -800,11 +806,16 @@ function ReportsPage({projectId,period}){
         const dailyAvg = days > 0 ? total / days : 0;
         return(
           <div className="kpi-grid" style={{gridTemplateColumns:"repeat(5,1fr)"}}>
-            <KPI label="إجمالي المبيعات" value={total}       color="#3B6BF5" icon="💰" sub={`كاش: ${fmt(cashSales)}`}/>
-            <KPI label="متوسط اليومي"    value={dailyAvg}    color="#0EA5C4" icon="📅" sub={`${days} يوم عمل`}/>
-            <KPI label="مجمل الربح"      value={gross}       color="#D97706" icon="📦" badge={pct(gross,total)}       badgeStyle={{background:"#FEF3C7",color:"#D97706"}}/>
-            <KPI label="صافي الربح"      value={netProfit}   color="#16A34A" icon="📈" badge={pct(netProfit,total)}   badgeStyle={{background:"#DCFCE7",color:"#16A34A"}}/>
-            <KPI label="صافي التدفق"     value={cashflow}    color="#7C3AED" icon="💸" sub="بعد المسحوبات"/>
+            <KPI label="إجمالي المبيعات" value={total}    color="#3B6BF5" icon="💰" sub={`كاش: ${fmt(cashSales)}`}
+              tooltip={`كاش: ${fmt(cashSales)}\nشبكة: ${fmt(netSales)}\nالمجموع: ${fmt(total)}`}/>
+            <KPI label="متوسط اليومي"   value={dailyAvg} color="#0EA5C4" icon="📅" sub={`${days} يوم عمل`}
+              tooltip={`إجمالي المبيعات ÷ أيام العمل\n${fmt(total)} ÷ ${days} = ${fmt(dailyAvg)}`}/>
+            <KPI label="مجمل الربح"     value={gross}    color="#D97706" icon="📦" badge={pct(gross,total)} badgeStyle={{background:"#FEF3C7",color:"#D97706"}}
+              tooltip={`المبيعات - المصروفات التشغيلية - الثابتة\n${fmt(total)} - ${fmt(opExp)} - ${fmt(fixedExp)} = ${fmt(gross)}`}/>
+            <KPI label="صافي الربح"     value={netProfit} color="#16A34A" icon="📈" badge={pct(netProfit,total)} badgeStyle={{background:"#DCFCE7",color:"#16A34A"}}
+              tooltip={`مجمل الربح - أقساط القروض\n${fmt(gross)} - ${fmt(loansPaid)} = ${fmt(netProfit)}`}/>
+            <KPI label="صافي التدفق"    value={cashflow}  color="#7C3AED" icon="💸" sub="بعد المسحوبات"
+              tooltip={`صافي الربح - مسحوبات الشركاء\n${fmt(netProfit)} - ${fmt(withd)} = ${fmt(cashflow)}`}/>
           </div>
         );
       })()}
