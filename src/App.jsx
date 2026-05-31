@@ -1332,7 +1332,7 @@ export default function App(){
                 title="اضغط لتغيير الشعار"
                 style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer",fontSize:0}}/>
             </div>
-            <div><div className="sb-name">تحسيب</div><div className="sb-sub">اضغط الشعار للتغيير</div></div>
+            <div><div className="sb-name">تحسيب</div><div className="sb-sub">نظام المحاسبة</div></div>
           </div>
           <nav className="sb-nav">
             {NAV.map((n,i)=>(
