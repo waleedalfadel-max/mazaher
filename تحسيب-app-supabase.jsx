@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 // ══════════════════════════════════════════
 const SUPABASE_URL    = "https://dnuxevxxgmgptptmuzdy.supabase.co";
 const SUPABASE_ANON   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRudXhldnh4Z21ncHRwdG11emR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MjY1OTAsImV4cCI6MjA5NTEwMjU5MH0.o7lx6HiTU8a3XPF501WNFYk7NOxfYoBrphqVunhOk2s";
-const PROJECT_NAME    = "مزاهر";
+const PROJECT_NAME    = "تحسيب";
 
 // ══════════════════════════════════════════
 //  ٢. Supabase Client بسيط (بدون مكتبة)
@@ -570,7 +570,7 @@ export default function App() {
       <style>{CSS}</style>
       <div className="layout">
         <aside className="sidebar">
-          <div className="brand"><div className="brand-name">⚙️ مزاهر</div><div className="brand-role">لوحة المحاسب</div></div>
+          <div className="brand"><div className="brand-name">⚙️ تحسيب</div><div className="brand-role">لوحة المحاسب</div></div>
           {NAV.map(n=>(
             <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>setPage(n.id)}>
               <span className="nav-icon">{n.icon}</span>

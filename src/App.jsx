@@ -1307,7 +1307,7 @@ export default function App(){
         <aside className={`sidebar ${menu?"open":""}`}>
           <div className="sb-brand">
             <div className="sb-icon">☕</div>
-            <div><div className="sb-name">مزاهر</div><div className="sb-sub">نظام المحاسبة</div></div>
+            <div><div className="sb-name">تحسيب</div><div className="sb-sub">نظام المحاسبة</div></div>
           </div>
           <nav className="sb-nav">
             {NAV.map((n,i)=>(
