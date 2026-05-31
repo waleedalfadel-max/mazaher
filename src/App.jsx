@@ -1289,6 +1289,24 @@ export default function App(){
   const [period,setPeriod]=useState({from:monthStart(),to:today()});
   const [pending,setPend] =useState(0);
   const [menu,setMenu]    =useState(false);
+  const [logoSrc,setLogoSrc]=useState(()=>localStorage.getItem("tahseeb_logo")||"/favicon.png");
+
+  useEffect(()=>{
+    const link=document.querySelector("link[rel='icon']");
+    if(link)link.href=logoSrc;
+  },[logoSrc]);
+
+  const handleLogoChange=e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const dataUrl=ev.target.result;
+      setLogoSrc(dataUrl);
+      localStorage.setItem("tahseeb_logo",dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(()=>{
     sb.query("ledger_entries",{filter:{"project_id":`eq.${PROJECT_ID}`,"status":"neq.approved"},select:"id"})
@@ -1306,8 +1324,15 @@ export default function App(){
         {menu&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:99}} onClick={()=>setMenu(false)}/>}
         <aside className={`sidebar ${menu?"open":""}`}>
           <div className="sb-brand">
-            <div className="sb-icon">☕</div>
-            <div><div className="sb-name">تحسيب</div><div className="sb-sub">نظام المحاسبة</div></div>
+            <div style={{position:"relative",width:40,height:40,flexShrink:0}}>
+              <img src={logoSrc} alt="شعار"
+                style={{width:40,height:40,borderRadius:12,objectFit:"cover",display:"block"}}
+                onError={e=>{e.target.style.display="none";e.target.nextSibling.style.zIndex=1;}}/>
+              <input type="file" accept="image/*" onChange={handleLogoChange}
+                title="اضغط لتغيير الشعار"
+                style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer",fontSize:0}}/>
+            </div>
+            <div><div className="sb-name">تحسيب</div><div className="sb-sub">اضغط الشعار للتغيير</div></div>
           </div>
           <nav className="sb-nav">
             {NAV.map((n,i)=>(
