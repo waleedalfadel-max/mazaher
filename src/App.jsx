@@ -395,6 +395,8 @@ html,body{height:100%;background:var(--bg);color:var(--t0);font-family:'Cairo',s
 
 /* ── Mobile ── */
 .mob-btn{display:none;background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:4px}
+.kpi-grid-rep{grid-template-columns:repeat(4,1fr)}
+.rep-header-stats{display:flex;gap:12px}
 @media(max-width:900px){
   .sidebar{position:fixed;right:0;top:0;bottom:0;z-index:100;transform:translateX(100%);transition:transform .3s}
   .sidebar.open{transform:translateX(0)}
@@ -404,6 +406,22 @@ html,body{height:100%;background:var(--bg);color:var(--t0);font-family:'Cairo',s
   .rep-grid{grid-template-columns:1fr}
   .bal-row{grid-template-columns:1fr}
   .page{padding:14px}
+}
+@media(max-width:768px){
+  .kpi-grid-rep{grid-template-columns:repeat(2,1fr)}
+  .kpi-value{font-size:26px;letter-spacing:-.5px}
+  .kpi-label{font-size:10px}
+  .kpi{padding:14px 12px}
+  .rep-header{flex-direction:column;gap:14px;padding:16px 18px}
+  .rep-header-stats{width:100%}
+  .rep-header-stat{flex:1;text-align:center;min-width:0}
+  .rep-header-stat-value{font-size:20px}
+  .rep-header-stat-label{font-size:11px}
+  .bal-value{font-size:24px}
+  .bal-card{padding:14px 16px}
+  .r-val{font-size:15px;font-weight:700}
+  .r-lbl{font-size:13px}
+  .r-row{padding:10px 12px}
 }
 @media print{
   .sidebar,.topbar,button,.toolbar{display:none!important}
@@ -789,7 +807,7 @@ function ReportsPage({projectId,period}){
           <div className="rep-header-title">📊 التقرير المالي</div>
           <div className="rep-header-sub">{period.from} — {period.to}</div>
         </div>
-        <div style={{display:"flex",gap:12}}>
+        <div className="rep-header-stats">
           {[{l:"إجمالي المبيعات",v:fmt(total),c:"#4ADE80"},{l:"صافي الربح",v:fmt(netProfit),c:netProfit>=0?"#60A5FA":"#F87171"}]
             .map((s,i)=>(
               <div key={i} className="rep-header-stat">
@@ -805,7 +823,7 @@ function ReportsPage({projectId,period}){
         const days = new Set(ledger.filter(e=>(e.type||"").includes("مبيعات")).map(e=>e.date)).size;
         const dailyAvg = days > 0 ? total / days : 0;
         return(
-          <div className="kpi-grid" style={{gridTemplateColumns:"repeat(5,1fr)"}}>
+          <div className="kpi-grid kpi-grid-rep">
             <KPI label="إجمالي المبيعات" value={total}    color="#3B6BF5" icon="💰" sub={`كاش: ${fmt(cashSales)}`}
               tooltip={`كاش: ${fmt(cashSales)}\nشبكة: ${fmt(netSales)}\nالمجموع: ${fmt(total)}`}/>
             <KPI label="متوسط اليومي"   value={dailyAvg} color="#0EA5C4" icon="📅" sub={`${days} يوم عمل`}
@@ -814,8 +832,6 @@ function ReportsPage({projectId,period}){
               tooltip={`المبيعات - المصروفات التشغيلية - الثابتة\n${fmt(total)} - ${fmt(opExp)} - ${fmt(fixedExp)} = ${fmt(gross)}`}/>
             <KPI label="صافي الربح"     value={netProfit} color="#16A34A" icon="📈" badge={pct(netProfit,total)} badgeStyle={{background:"#DCFCE7",color:"#16A34A"}}
               tooltip={`مجمل الربح - أقساط القروض\n${fmt(gross)} - ${fmt(loansPaid)} = ${fmt(netProfit)}`}/>
-            <KPI label="صافي التدفق"    value={cashflow}  color="#7C3AED" icon="💸" sub="بعد المسحوبات"
-              tooltip={`صافي الربح - مسحوبات الشركاء\n${fmt(netProfit)} - ${fmt(withd)} = ${fmt(cashflow)}`}/>
           </div>
         );
       })()}
