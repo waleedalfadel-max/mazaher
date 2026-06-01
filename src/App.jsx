@@ -200,6 +200,15 @@ html,body{height:100%;background:var(--bg);color:var(--t0);font-family:'Cairo',s
   background:rgba(255,255,255,.06);border-radius:8px;padding:12px;
 }
 .period-label{font-size:10px;color:rgba(255,255,255,.35);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px}
+.preset-btn{
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:6px;color:rgba(255,255,255,.55);font-size:11px;font-weight:600;
+  padding:6px 4px;cursor:pointer;font-family:'Cairo',sans-serif;text-align:center;
+  transition:all .15s;white-space:nowrap;
+}
+.preset-btn:hover{background:rgba(255,255,255,.12);color:#FFF}
+.preset-btn.on{background:rgba(59,107,245,.35);border-color:#3B6BF5;color:#FFF}
 .period-field{margin-bottom:6px}
 .period-field label{font-size:10px;color:rgba(255,255,255,.35);display:block;margin-bottom:3px}
 .period-field input{
@@ -1303,8 +1312,29 @@ const NAV=[
 export default function App(){
   const [page,setPage]   =useState("review");
   const [period,setPeriod]=useState({from:monthStart(),to:today()});
+  const [preset,setPreset]=useState("month");
   const [pending,setPend] =useState(0);
   const [menu,setMenu]    =useState(false);
+
+  const applyPreset=key=>{
+    setPreset(key);
+    if(key==="custom")return;
+    const d=new Date();
+    const pad=n=>String(n).padStart(2,"0");
+    const fmt2=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const maps={
+      today:()=>{const s=today();return{from:s,to:s}},
+      yesterday:()=>{const x=new Date(d);x.setDate(d.getDate()-1);const s=fmt2(x);return{from:s,to:s}},
+      month:()=>({from:monthStart(),to:today()}),
+      lastMonth:()=>{
+        const last=new Date(d.getFullYear(),d.getMonth(),0);
+        const first=new Date(last.getFullYear(),last.getMonth(),1);
+        return{from:fmt2(first),to:fmt2(last)};
+      },
+      year:()=>({from:`${d.getFullYear()}-01-01`,to:today()}),
+    };
+    setPeriod(maps[key]());
+  };
   const [logoSrc,setLogoSrc]=useState(()=>localStorage.getItem("tahseeb_logo")||"/favicon.png");
 
   useEffect(()=>{
@@ -1365,8 +1395,24 @@ export default function App(){
           <div className="sb-bottom">
             <div className="period-box">
               <div className="period-label">الفترة الزمنية</div>
-              <div className="period-field"><label>من</label><input type="date" value={period.from} onChange={e=>setPeriod(p=>({...p,from:e.target.value}))}/></div>
-              <div className="period-field"><label>إلى</label><input type="date" value={period.to}   onChange={e=>setPeriod(p=>({...p,to:e.target.value}))}/></div>
+              <div className="preset-grid">
+                {[
+                  {k:"today",    l:"اليوم"},
+                  {k:"yesterday",l:"الأمس"},
+                  {k:"month",    l:"هذا الشهر"},
+                  {k:"lastMonth",l:"الشهر الماضي"},
+                  {k:"year",     l:"هذي السنة"},
+                  {k:"custom",   l:"✏ مخصص"},
+                ].map(({k,l})=>(
+                  <button key={k} className={`preset-btn${preset===k?" on":""}`} onClick={()=>applyPreset(k)}>{l}</button>
+                ))}
+              </div>
+              {preset==="custom"&&(
+                <>
+                  <div className="period-field"><label>من</label><input type="date" value={period.from} onChange={e=>setPeriod(p=>({...p,from:e.target.value}))}/></div>
+                  <div className="period-field"><label>إلى</label><input type="date" value={period.to}   onChange={e=>setPeriod(p=>({...p,to:e.target.value}))}/></div>
+                </>
+              )}
             </div>
             <div className="sb-ver">v2.1 — إصلاحات محاسبية</div>
           </div>
