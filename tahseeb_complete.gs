@@ -249,7 +249,27 @@ function applyDropdown(sheet, row) { sheet.getRange(row,2).setDataValidation ( S
 // onEdit — تغيير اللون عند اكتمال البيانات 
 // ══════════════════════════════════════════ 
 
-function onEdit(e) { if (!e) return ; var sheet = e.range.getSheet (); if (sheet.getName()!==CONFIG.SHEET_LEDGER) return ; var row = e.range.getRow (); if (row<3) return ; var type = sheet.getRange(row,2).getValue (); var amounts = sheet.getRange(row,4,1,6).getValues ()[0]; var hasAmount = amounts.some(function(v){ return Number(v)>0; }) ; if (type && type!=="" && hasAmount) { sheet.getRange(row,1,1,15).setBackground("#FFFFFF") ; } } 
+function onEdit(e) {
+  if (!e) return;
+  var sheet = e.range.getSheet();
+  if (sheet.getName() !== CONFIG.SHEET_LEDGER) return;
+  var row = e.range.getRow();
+  if (row < 3) return;
+
+  // تغيير اللون عند اكتمال السطر
+  var type = sheet.getRange(row, 2).getValue();
+  var amounts = sheet.getRange(row, 4, 1, 6).getValues()[0];
+  var hasAmount = amounts.some(function(v) { return Number(v) > 0; });
+  if (type && type !== "" && hasAmount) {
+    sheet.getRange(row, 1, 1, 15).setBackground("#FFFFFF");
+  }
+
+  // ترتيب الدفتر بالتاريخ تلقائياً
+  var last = sheet.getLastRow();
+  if (last > 3) {
+    sheet.getRange(3, 1, last - 2, 16).sort({column: 1, ascending: true});
+  }
+} 
 // ══════════════════════════════════════════ 
 // إعداد الشيتات 
 // ══════════════════════════════════════════
@@ -913,5 +933,6 @@ function _syncAllFromLedgerRows(ss, rows) {
   });
   Logger.log("✅ Supabase — مبيعات: " + salesCount + " | دفتر: " + ledgerCount);
 }
+
 
 
