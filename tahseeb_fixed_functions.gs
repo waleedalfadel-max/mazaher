@@ -201,3 +201,110 @@ function updateExistingJournal(ss, date, newLines, voucherNo) {
   sheet.insertRowBefore(insertRow);
   sheet.getRange(insertRow, 1, 1, 7).setBackground("#ECF0F1");
 }
+
+
+// ══════════════════════════════════════════
+// supabaseDelete — دالة مساعدة لحذف سجلات بفلتر
+// ══════════════════════════════════════════
+function supabaseDelete(table, filter) {
+  var url = CONFIG.SUPABASE_URL + "/rest/v1/" + table + "?" + filter;
+  var res = UrlFetchApp.fetch(url, {
+    method: "DELETE",
+    headers: {
+      "apikey": CONFIG.SUPABASE_KEY,
+      "Authorization": "Bearer " + CONFIG.SUPABASE_KEY
+    },
+    muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  Logger.log("DELETE " + table + " → HTTP " + code);
+  return code === 200 || code === 204;
+}
+
+
+// ══════════════════════════════════════════
+// syncAllToSupabase — مصحح (مسح ثم رفع كامل)
+// الإصلاح: بدل الإضافة فقط، يحذف كل بيانات المشروع
+// ثم يرفع كل شيء من الشيت — الشيت هو المصدر الوحيد للحقيقة
+// ══════════════════════════════════════════
+function syncAllToSupabase() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ui = SpreadsheetApp.getUi();
+
+  // تأكيد قبل المسح
+  if (ui.alert(
+    "⚠️ مزامنة كاملة",
+    "سيُحذف كل بيانات الدفتر والمبيعات من Supabase ثم تُرفع من جديد من الشيت.\n\nهل أنت متأكد؟",
+    ui.ButtonSet.YES_NO
+  ) !== ui.Button.YES) return;
+
+  var projectId = getProjectId();
+  if (!projectId) { ui.alert("❌ ما وجد مشروع في Supabase"); return; }
+
+  // ── 1. حذف البيانات القديمة ──
+  Logger.log("🗑️ حذف البيانات القديمة...");
+  var delSales  = supabaseDelete("sales",          "project_id=eq." + projectId);
+  var delLedger = supabaseDelete("ledger_entries", "project_id=eq." + projectId);
+
+  if (!delSales || !delLedger) {
+    ui.alert("❌ فشل حذف البيانات القديمة\n\nتأكد أن السكيما تسمح بـ DELETE لهذا المستخدم");
+    return;
+  }
+  Logger.log("✅ حُذفت البيانات القديمة");
+
+  // ── 2. رفع المبيعات ──
+  var salesSheet = ss.getSheetByName(CONFIG.SHEET_SALES);
+  var salesRows  = salesSheet.getLastRow() > 1
+    ? salesSheet.getRange(2, 1, salesSheet.getLastRow() - 1, 5).getValues()
+    : [];
+  var salesCount = 0;
+  salesRows.forEach(function(row) {
+    if (!row[0]) return;
+    var ok = supabaseInsert("sales", {
+      project_id:    projectId,
+      date:          row[0] instanceof Date
+                       ? Utilities.formatDate(row[0], Session.getScriptTimeZone(), "yyyy-MM-dd")
+                       : row[0].toString(),
+      cash_sales:    Number(row[1]) || 0,
+      network_sales: Number(row[2]) || 0,
+      description:   row[4] || "تقرير POS"
+    });
+    if (ok) salesCount++;
+  });
+  Logger.log("✅ مبيعات: " + salesCount + " سجل");
+
+  // ── 3. رفع الدفتر ──
+  var ledgerSheet = ss.getSheetByName(CONFIG.SHEET_LEDGER);
+  var ledgerRows  = ledgerSheet.getLastRow() > 2
+    ? ledgerSheet.getRange(3, 1, ledgerSheet.getLastRow() - 2, 16).getValues()
+    : [];
+  var ledgerCount = 0;
+  ledgerRows.forEach(function(row) {
+    if (!row[0] || !row[1]) return;
+    var dateStr = row[0] instanceof Date
+      ? Utilities.formatDate(row[0], Session.getScriptTimeZone(), "yyyy-MM-dd")
+      : row[0].toString();
+    var total = (Number(row[3])||0) + (Number(row[4])||0) + (Number(row[5])||0)
+              + (Number(row[6])||0) + (Number(row[7])||0) + (Number(row[8])||0);
+    var ok = supabaseInsert("ledger_entries", {
+      project_id:  projectId,
+      date:        dateStr,
+      type:        row[1]  || "",
+      description: row[2]  || "",
+      cash_out:    Number(row[3])  || 0,
+      cash_in:     Number(row[4])  || 0,
+      bank_out:    Number(row[5])  || 0,
+      bank_in:     Number(row[6])  || 0,
+      custody_out: Number(row[7])  || 0,
+      custody_in:  Number(row[8])  || 0,
+      vat_amount:  Number(row[14]) || 0,
+      total_amount: total,
+      status:      "approved",
+      journal_no:  row[15] ? row[15].toString().replace("قيد -", "").trim() : null
+    });
+    if (ok) ledgerCount++;
+  });
+  Logger.log("✅ دفتر: " + ledgerCount + " سجل");
+
+  ui.alert("✅ اكتملت المزامنة الكاملة\n\nمبيعات: " + salesCount + " سجل\nدفتر: " + ledgerCount + " سجل");
+}
