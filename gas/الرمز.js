@@ -3435,12 +3435,17 @@ function fixDriveFolders() {
   var last = ledger.getLastRow();
   if (last < 3) { ui.alert("❌ الدفتر فارغ"); return; }
 
+  var lastJournalNo = parseInt(
+    PropertiesService.getScriptProperties().getProperty("last_journal_no") || "0", 10
+  );
+
   if (ui.alert(
     "⚠️ تحقق قبل المتابعة",
     "ستتم العمليات التالية:\n" +
     "١. حذف جميع مجلدات 2025 (إنها خاطئة)\n" +
     "٢. نقل أي مجلد قيد في شهر خاطئ للشهر الصحيح\n" +
-    "٣. إعادة تسمية المجلدات المجهولة إذا أمكن\n\nمتابعة؟",
+    "٣. إعادة تسمية المجلدات المجهولة إذا أمكن\n" +
+    "٤. حذف قيود رقمها > " + lastJournalNo + " (قديمة بعد إعادة الترقيم)\n\nمتابعة؟",
     ui.ButtonSet.YES_NO
   ) !== ui.Button.YES) return;
 
@@ -3509,6 +3514,20 @@ function fixDriveFolders() {
     jFolders.forEach(function(jFolder) {
       var jName = jFolder.getName();
       if (!/^قيد-\d+$/.test(jName)) return;
+
+      // ── خطوة ٤: حذف قيود رقمها أكبر من last_journal_no ──
+      var folderNo = parseInt(jName.replace("قيد-", ""), 10);
+      if (folderNo > lastJournalNo) {
+        try {
+          jFolder.setTrashed(true);
+          deleted++;
+          log.push("🗑️ حذف قيد قديم: " + currentMonth + "/" + jName + " (>" + lastJournalNo + ")");
+        } catch(e) {
+          errors++;
+          log.push("❌ فشل حذف " + jName + ": " + e.message);
+        }
+        return;
+      }
 
       // الحالة أ: القيد موجود في الدفتر
       if (voucherToMonth.hasOwnProperty(jName)) {
