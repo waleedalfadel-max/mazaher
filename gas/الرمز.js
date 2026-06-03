@@ -3268,11 +3268,27 @@ function _rebuildJournalSheet(ss, rows) {
     var voucherNo = getNextJournalNumber();
     writeJournalEntry(ss, date, lines, voucherNo);
     journalDateIndex[date] = voucherNo;
-
-    // حدّث رقم القيد في الدفتر
-    updateLedgerWithJournalNo(ss, date, voucherNo);
     created++;
   });
+
+  // ── كتابة أرقام القيود في عمود P دفعة واحدة ──
+  var ledgerSheet = ss.getSheetByName(CONFIG.SHEET_LEDGER);
+  var lLast = ledgerSheet.getLastRow();
+  if (lLast >= 3 && Object.keys(journalDateIndex).length > 0) {
+    var lDates = ledgerSheet.getRange(3, 1, lLast - 2, 1).getValues();
+    var colP   = ledgerSheet.getRange(3, 16, lLast - 2, 1).getValues();
+    var tz     = Session.getScriptTimeZone();
+    for (var i = 0; i < lDates.length; i++) {
+      var d = lDates[i][0] instanceof Date
+        ? Utilities.formatDate(lDates[i][0], tz, "yyyy-MM-dd")
+        : lDates[i][0].toString().trim();
+      if (journalDateIndex[d]) {
+        colP[i][0] = "قيد-" + formatVoucherNo(journalDateIndex[d]);
+      }
+    }
+    ledgerSheet.getRange(3, 16, lLast - 2, 1).setValues(colP);
+    Logger.log("✅ عمود P: كُتب لـ " + Object.keys(journalDateIndex).length + " تاريخ");
+  }
 
   Logger.log("✅ القيود: " + created + " قيد");
 }
