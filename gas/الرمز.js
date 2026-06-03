@@ -3419,21 +3419,32 @@ function fixDriveFolders() {
   var last = ledger.getLastRow();
   if (last < 3) { ui.alert("❌ الدفتر فارغ"); return; }
 
-  // ── خطوة ١: بناء الخريطة من الدفتر ──
-  // voucherName (قيد-0001) → الشهر الصحيح (2026-05)
+  if (ui.alert(
+    "⚠️ تحقق قبل المتابعة",
+    "ستتم العمليات التالية:\n" +
+    "١. حذف جميع مجلدات 2025 (إنها خاطئة)\n" +
+    "٢. نقل أي مجلد قيد في شهر خاطئ للشهر الصحيح\n" +
+    "٣. إعادة تسمية المجلدات المجهولة إذا أمكن\n\nمتابعة؟",
+    ui.ButtonSet.YES_NO
+  ) !== ui.Button.YES) return;
+
+  // ── خطوة ١: بناء الخريطة من الدفتر (عمود A التاريخ، عمود P رقم القيد) ──
   var rows = ledger.getRange(3, 1, last - 2, 16).getValues();
+  var tz   = Session.getScriptTimeZone();
+
   var voucherToMonth = {}; // "قيد-0001" → "2026-05"
 
   rows.forEach(function(r) {
-    var rawDate   = r[0];
-    var voucherRaw = r[15]; // عمود P
+    var rawDate    = r[0];
+    var voucherRaw = r[15]; // عمود P (index 15)
     if (!rawDate || !voucherRaw) return;
     var dateStr = rawDate instanceof Date
-      ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "yyyy-MM-dd")
+      ? Utilities.formatDate(rawDate, tz, "yyyy-MM-dd")
       : rawDate.toString().trim();
-    var voucher = voucherRaw.toString().trim(); // e.g. "قيد-0001"
-    if (!dateStr || !voucher) return;
+    var voucher = voucherRaw.toString().trim();
+    if (!dateStr || !voucher || dateStr.length < 7) return;
     var month = dateStr.substring(0, 7); // "2026-05"
+    // الدفتر مصدر الحقيقة — أول مرة نراها هي الصحيحة
     if (!voucherToMonth[voucher]) voucherToMonth[voucher] = month;
   });
 
@@ -3442,54 +3453,66 @@ function fixDriveFolders() {
     return;
   }
 
-  // ── خطوة ٢: جمع كل مجلدات الأرشيف ──
-  var parent = DriveApp.getFolderById(CONFIG.ARCHIVE_PARENT_ID);
-  var monthIter = parent.getFolders();
+  // ── خطوة ٢: جمع مجلدات الأرشيف ──
+  var parent     = DriveApp.getFolderById(CONFIG.ARCHIVE_PARENT_ID);
+  var monthIter  = parent.getFolders();
+  var allMonthFolders = [];
+  while (monthIter.hasNext()) { allMonthFolders.push(monthIter.next()); }
 
-  var renamed = 0, moved = 0, errors = 0;
+  var deleted = 0, moved = 0, renamed = 0, errors = 0;
   var log = [];
 
-  while (monthIter.hasNext()) {
-    var monthFolder = monthIter.next();
-    var currentMonth = monthFolder.getName(); // "2026-05"
-    if (!/^\d{4}-\d{2}$/.test(currentMonth)) continue; // تجاهل غير مجلدات الشهور
+  allMonthFolders.forEach(function(monthFolder) {
+    var currentMonth = monthFolder.getName();
+    if (!/^\d{4}-\d{2}$/.test(currentMonth)) return; // تجاهل غير مجلدات الشهور
 
-    // اجمع مجلدات القيود داخل هذا الشهر
+    // ── خطوة ٣: حذف مجلدات 2025 بالكامل ──
+    if (currentMonth.startsWith("2025")) {
+      try {
+        monthFolder.setTrashed(true);
+        deleted++;
+        log.push("🗑️ حذف مجلد 2025: " + currentMonth);
+      } catch(e) {
+        errors++;
+        log.push("❌ فشل حذف " + currentMonth + ": " + e.message);
+      }
+      return; // انتقل للمجلد التالي
+    }
+
+    // ── خطوة ٤: فحص مجلدات القيود داخل هذا الشهر ──
     var jIter = monthFolder.getFolders();
     var jFolders = [];
     while (jIter.hasNext()) { jFolders.push(jIter.next()); }
 
-    // المجلدات المتوقعة لهذا الشهر حسب الدفتر
+    // المجلدات المتوقعة لهذا الشهر
     var expectedInMonth = {};
     Object.keys(voucherToMonth).forEach(function(v) {
       if (voucherToMonth[v] === currentMonth) expectedInMonth[v] = false;
     });
 
-    // ── خطوة ٣ و٤: فحص كل مجلد قيد ──
     jFolders.forEach(function(jFolder) {
-      var jName = jFolder.getName(); // "قيد-0001"
-      if (!/^قيد-\d+$/.test(jName)) return; // تجاهل غير مجلدات القيود
+      var jName = jFolder.getName();
+      if (!/^قيد-\d+$/.test(jName)) return;
 
-      // الحالة أ: الاسم موجود في الدفتر
+      // الحالة أ: القيد موجود في الدفتر
       if (voucherToMonth.hasOwnProperty(jName)) {
-        expectedInMonth[jName] = true; // تم إيجاده
+        expectedInMonth[jName] = true;
         var correctMonth = voucherToMonth[jName];
 
         if (correctMonth !== currentMonth) {
-          // ── خطوة ٦: الشهر خاطئ — انقل المجلد بكامل محتوياته ──
+          // الشهر خاطئ — انقل للشهر الصحيح
           try {
             var targetFolders = parent.getFoldersByName(correctMonth);
             var targetMonth   = targetFolders.hasNext()
               ? targetFolders.next()
               : parent.createFolder(correctMonth);
 
-            // تحقق إن لم يكن هناك مجلد بنفس الاسم في الشهر الصحيح
-            var existingCheck = targetMonth.getFoldersByName(jName);
-            if (existingCheck.hasNext()) {
-              // دمج المحتويات في المجلد الموجود
-              var targetJFolder = existingCheck.next();
+            var existCheck = targetMonth.getFoldersByName(jName);
+            if (existCheck.hasNext()) {
+              // دمج الملفات في المجلد الموجود
+              var dest  = existCheck.next();
               var files = jFolder.getFiles();
-              while (files.hasNext()) { files.next().moveTo(targetJFolder); }
+              while (files.hasNext()) { files.next().moveTo(dest); }
               jFolder.setTrashed(true);
               log.push("📦 دمج: " + currentMonth + "/" + jName + " → " + correctMonth + "/" + jName);
             } else {
@@ -3499,20 +3522,19 @@ function fixDriveFolders() {
             moved++;
           } catch(e) {
             errors++;
-            log.push("❌ فشل نقل " + jName + ": " + e.message);
+            log.push("❌ فشل نقل " + jName + " من " + currentMonth + ": " + e.message);
           }
         }
-        // else: الشهر والاسم صحيحان ✅
+        // else: صحيح ✅
 
       } else {
-        // الحالة ب: الاسم غير موجود في الدفتر (قد يكون اسماً قديماً)
-        // ابحث عن قيود ناقصة في نفس الشهر
+        // الحالة ب: القيد غير موجود في الدفتر — ربما اسم قديم
         var missingList = Object.keys(expectedInMonth).filter(function(v) {
           return !expectedInMonth[v];
         });
 
-        // ── خطوة ٥: إذا يوجد تطابق وحيد — أعد التسمية ──
         if (missingList.length === 1) {
+          // تطابق وحيد → أعد التسمية
           var correctName = missingList[0];
           try {
             jFolder.setName(correctName);
@@ -3524,24 +3546,25 @@ function fixDriveFolders() {
             log.push("❌ فشل تسمية " + jName + ": " + e.message);
           }
         } else {
-          log.push("⚠️ مجلد غير معروف: " + currentMonth + "/" + jName
-            + (missingList.length > 1 ? " (مجلدات ناقصة محتملة: " + missingList.length + ")" : ""));
+          log.push("⚠️ مجلد مجهول: " + currentMonth + "/" + jName
+            + (missingList.length > 1 ? " (" + missingList.length + " ناقص)" : " (لا يوجد تطابق)"));
         }
       }
     });
-  }
+  });
 
-  // ── تقرير النتائج ──
+  // ── تقرير ──
   var summary = "✅ اكتمل إصلاح مجلدات Drive\n\n"
-    + "✏️ إعادة تسمية: " + renamed + "\n"
-    + "📦 نقل/دمج:     " + moved + "\n"
-    + "❌ أخطاء:        " + errors;
+    + "🗑️ مجلدات 2025 محذوفة: " + deleted + "\n"
+    + "📦 منقول/مدموج:        " + moved   + "\n"
+    + "✏️ مُعاد تسميته:       " + renamed + "\n"
+    + "❌ أخطاء:               " + errors;
 
   if (log.length > 0) {
     summary += "\n\nالتفاصيل:\n" + log.slice(0, 25).join("\n");
     if (log.length > 25) summary += "\n... و " + (log.length - 25) + " إجراء آخر";
   } else {
-    summary += "\n\n✅ جميع المجلدات صحيحة";
+    summary += "\n\n✅ جميع المجلدات كانت صحيحة";
   }
 
   ui.alert(summary);
