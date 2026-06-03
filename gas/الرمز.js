@@ -3230,11 +3230,6 @@ function _rebuildSalesSheet(ss, rows) {
 //  إعادة بناء شيت القيود
 // ══════════════════════════════════════════
 function _rebuildJournalSheet(ss, rows) {
-  // اقرأ آخر رقم قيد من Script Properties قبل حذف الشيت
-  var lastVoucherNo = parseInt(
-    PropertiesService.getScriptProperties().getProperty("last_journal_no") || "0", 10
-  );
-
   // احذف شيت القيود القديم وأنشئ جديد
   var old = ss.getSheetByName("القيود");
   if (old) ss.deleteSheet(old);
@@ -3258,7 +3253,7 @@ function _rebuildJournalSheet(ss, rows) {
     });
   });
 
-  PropertiesService.getScriptProperties().setProperty("last_journal_no", lastVoucherNo.toString());
+  PropertiesService.getScriptProperties().setProperty("last_journal_no", "0");
   journalDateIndex = {};
 
   var dates   = Object.keys(byDate).sort();
