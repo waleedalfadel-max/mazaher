@@ -3253,8 +3253,19 @@ function _rebuildJournalSheet(ss, rows) {
     });
   });
 
-  // أعد ترقيم القيود من الصفر
-  PropertiesService.getScriptProperties().setProperty("last_journal_no", "0");
+  // ابحث عن آخر رقم قيد موجود فعلاً في شيت القيود
+  var journalSheet = ss.getSheetByName("القيود");
+  var lastVoucherNo = 0;
+  if (journalSheet && journalSheet.getLastRow() > 1) {
+    var jData = journalSheet.getRange(2, 1, journalSheet.getLastRow()-1, 1).getValues();
+    jData.forEach(function(r) {
+      if (r[0] && r[0].toString().startsWith("قيد رقم")) {
+        var num = parseInt(r[0].toString().replace("قيد رقم ", "").trim()) || 0;
+        if (num > lastVoucherNo) lastVoucherNo = num;
+      }
+    });
+  }
+  PropertiesService.getScriptProperties().setProperty("last_journal_no", lastVoucherNo.toString());
   journalDateIndex = {};
 
   var dates   = Object.keys(byDate).sort();
